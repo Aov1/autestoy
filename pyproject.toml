@@ -1,0 +1,31 @@
+[project]
+name = "autestoy"
+version = "0.1.0"
+description = "autestoy is a Python toy library for automating tests. autestoy -> auto test toy"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncssh>=2.22.0",
+    "nicegui>=3.9.0",
+    "numpy>=2.4.3",
+    "paramiko>=4.0.0",
+    "pyserial>=3.5",
+    "reportlib>=3.4.0",
+    "rich>=14.3.3",
+    "sdev>=0.7.10",
+]
+
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "./src",
+    # "./.venv/lib/python3.12/site-packages"
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

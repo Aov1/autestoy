@@ -17,15 +17,9 @@ def test_RemoteConfig():
     assert host.name == "new_name"
 
 
-def test_SSH():
+def test_SSH(remote):
     """测试SSH连接 与 执行命令"""
-    host = RemoteConfig(
-        user="u0_a210",
-        ip="192.168.0.32",
-        password="0402",
-        port=8022,
-    ).set_name("HUAWEI MATEPAD 12.2")
-    remote_pad = SSH(host, timeout=10)
+    remote_pad = SSH(remote, timeout=10)
     assert remote_pad.is_connected(), "SSH连接失败"
 
     res = remote_pad.exec_run("pwd")

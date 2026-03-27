@@ -37,6 +37,7 @@ class CmdRecord:
         self._result = ""
         self._result_iter: Iterator
         self.long_running_task: td.Thread
+        self.stop_event: td.Event
 
     def record_end(self) -> None:
         """手动记录命令结束时间，编写者保证在内部使用时记录，紧跟在命令结束之后"""

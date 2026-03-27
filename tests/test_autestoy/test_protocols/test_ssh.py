@@ -36,15 +36,25 @@ def test_SSH(remote):
     res.get_start_time()
 
     remote_pad.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
-    remote_pad.long_running("python infer_log.py")
-    remote_pad.long_running("tail -f ./log.txt")
+    infer_cmd = remote_pad.long_running("python infer_log.py")
+    tail_cmd = remote_pad.long_running("tail -f ./log.txt")
 
     input("enter quit")
 
     test_channel.run("cat log.txt")
     input("enter quit")
 
+    infer_cmd.stop_event.set()
+    tail_cmd.stop_event.set()
+
     test_channel.run("rm log.txt")
+    input("enter quit")
+
+    print(infer_cmd.long_running_task.is_alive())
+    print(tail_cmd.long_running_task.is_alive())
+
+    print(infer_cmd.get_end_time())
+    print(tail_cmd.get_end_time())
 
 
 def test_Channel_prompt():

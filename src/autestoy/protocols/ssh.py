@@ -159,12 +159,17 @@ class SSH:
     def _long_running_task(self, cmd: str, record: CmdRecord):
         _stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
         record.record_result(iter(stdout))
+        record.stop_event = td.Event()
 
-        while True:
+        while not record.stop_event.is_set():
             line = stdout.readline()
             if line != "":
                 print(f"[{record.get_id()}]:", line, end="")
             time.sleep(0.001)
+        else:
+            record.record_end()
+            # dbg
+            print("task end")
 
     def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecord:
         head_path_info, processed_cmd = self._path_process(cmd)

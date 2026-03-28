@@ -2,9 +2,8 @@ import queue
 import threading as td
 import time
 from enum import IntEnum, auto
-from typing import Iterable, Iterator
+from typing import Iterator
 
-import paramiko as pk
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
 from .ansi import remove_ansi

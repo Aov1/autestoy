@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import queue
 import re
 import threading as td
 import time
@@ -157,14 +158,19 @@ class SSH:
         return record
 
     def _long_running_task(self, cmd: str, record: CmdRecord):
-        _stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
-        record.record_result(iter(stdout))
+        stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
+
+        # record.record_result(iter(result))
+        # record.result_list = result
         record.stop_event = td.Event()
+        record.stdin = stdin
 
         while not record.stop_event.is_set():
             line = stdout.readline()
             if line != "":
-                print(f"[{record.get_id()}]:", line, end="")
+                print(f"[{record.id}]:", line, end="")
+                record.result_list.append(line)
+                record.fifo.put(line)
             time.sleep(0.001)
         else:
             record.record_end()
@@ -179,12 +185,14 @@ class SSH:
             CmdType.SSH_LONG_RUNNING,
             f"[{self.name}]{head_path_info} $",
         )
+        record.fifo = queue.Queue()
+        record.result_list = []
         self.cmds.append(record)
         print(record.get_fmt_prompt())
         task = td.Thread(target=self._long_running_task, args=(processed_cmd, record))
         task.daemon = True
         record.long_running_task = task
-        record._start_time = time.time()  # record start time
+        record.start_time = time.time()  # record start time
         task.start()
         time.sleep(wait_time)
         # task.join()

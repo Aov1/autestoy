@@ -33,28 +33,29 @@ def test_SSH(remote):
     res = test_channel.run("ls")
     res = test_channel.run("cd project/autestoy_sim")
     res = test_channel.run("python t10s.py")
-    res.get_start_time()
 
     remote_pad.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
     infer_cmd = remote_pad.long_running("python infer_log.py")
     tail_cmd = remote_pad.long_running("tail -f ./log.txt")
 
-    input("enter quit")
+    st_time = time.time()
+    while time.time() - st_time < 10:
+        if not tail_cmd.fifo.empty() and "line:10" in tail_cmd.fifo.get():
+            break
 
-    test_channel.run("cat log.txt")
-    input("enter quit")
+    infer_cmd.task_kill()
+    tail_cmd.task_kill()
 
-    infer_cmd.stop_event.set()
-    tail_cmd.stop_event.set()
-
-    test_channel.run("rm log.txt")
+    # test_channel.run("rm log.txt")
     input("enter quit")
 
     print(infer_cmd.long_running_task.is_alive())
     print(tail_cmd.long_running_task.is_alive())
 
-    print(infer_cmd.get_end_time())
-    print(tail_cmd.get_end_time())
+    print(infer_cmd.end_time)
+    print(tail_cmd.end_time)
+
+    test_channel.run("rm log.txt")
 
 
 def test_Channel_prompt():

@@ -1,0 +1,25 @@
+from autestoy.tools.datatype import str2num
+
+
+def test_str2num():
+    print()
+    assert str2num("1_000_000") == (0, 1000000)
+    assert str2num("-1_234_000") == (0, -1234000)
+    assert str2num("+1_234_000") == (0, 1234000)
+    assert str2num("123") == (0, 123)
+    assert str2num("+123") == (0, 123)
+    assert str2num("-123") == (0, -123)
+    print("整数字符串 ok")
+    assert str2num("1.0") == (0, 1.0)
+    assert str2num("-1.5") == (0, -1.5)
+    assert str2num("+1.5") == (0, 1.5)
+    assert str2num("1_000.0") == (0, 1000)
+    assert str2num("1000 0000.0000 0001") == (0, 10000000.0000_0001)
+    print("浮点字符串 ok")
+    assert str2num("1e6") == (0, 1000000)
+    assert str2num("1.5e-3") == (0, 0.0015)
+    print("科学计数法字符串 ok")
+    assert str2num("0b110011") == (0, int("0b110011", 2))
+    assert str2num("-0b11 0011") == (0, int("-0b11_0011", 2))
+    # assert str2num("0b110011") == (0, 0b110011)
+    assert str2num("-0b11 0011") == (0, int("-0b11_0011", 2))

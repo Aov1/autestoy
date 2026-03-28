@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import asyncio
+# import asyncio
 import queue
 import re
 import threading as td
 import time
 import warnings
-from typing import List, Self, override
+from typing import Self, Union, overload
 
 import asyncssh as assh
 import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect
-from ..tools.ansi import remove_ansi, remove_ansi_bytes
+from ..tools.ansi import remove_ansi
 from ..tools.result import CmdRecord, CmdType
 
 
@@ -303,3 +303,30 @@ class Channel:
         record.record_result(res)
         self.cmds.append(record)
         return record
+
+    @overload
+    def run_lines(self, cmds: list[str]) -> list[CmdRecord]:
+        """执行多行命令，返回命令记录列表"""
+        ...
+
+    @overload
+    def run_lines(self, cmds: str) -> list[CmdRecord]:
+        """执行多行命令，输入是带有换行符的字符串
+
+        如果无换行符，会调用self.run执行单行命令，统一返回list[CmdRecord]
+        """
+        ...
+
+    def run_lines(self, cmds: Union[list[str], str]) -> list[CmdRecord]:
+        if isinstance(cmds, list):
+            return [self.run(cmd) for cmd in cmds]
+        elif isinstance(cmds, str):
+            if "\n" in cmds or "\r\n" in cmds:
+                # 转换多行字符串命令为列表
+                cmd_list = cmds.replace("\r\n", "\n").split("\n")
+                # 去除空行
+                cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
+                # 递归调用run_lines
+                return self.run_lines(cmd_list)
+            else:  # 命令只有一行，统一列表返回格式
+                return [self.run(cmds)]

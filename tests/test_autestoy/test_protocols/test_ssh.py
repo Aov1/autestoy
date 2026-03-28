@@ -2,6 +2,7 @@ import re
 import time
 
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
+from autestoy.tools.result import CmdRecord
 
 
 def test_RemoteConfig():
@@ -84,3 +85,34 @@ def test_Channel_prompt():
         assert res, f"{Channel.prompt_pattern_default} can not match {s}"
 
 
+def test_Channel_run_lines(ssh: SSH):
+    ch = ssh.create_channel()
+    cmds = """
+    ls
+    cd project
+    ls
+    cd autestoy_sim
+    ls
+    pwd
+    ps
+    ps -aux
+    """
+    res = ch.run_lines(cmds)
+    assert isinstance(res, list)
+    for r in res:
+        assert isinstance(r, CmdRecord)
+
+    cmds_list = [
+        "ls",
+        "cd ..",
+        "ls",
+        "cd ..",
+        "ls",
+        "pwd",
+        "ps",
+        "ps -aux",
+    ]
+    res = ch.run_lines(cmds_list)
+    assert isinstance(res, list)
+    for r in res:
+        assert isinstance(r, CmdRecord)

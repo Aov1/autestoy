@@ -22,17 +22,17 @@ def test_SSH(remote):
     remote_pad = SSH(remote, timeout=10)
     assert remote_pad.is_connected(), "SSH连接失败"
 
-    res = remote_pad.exec_run("pwd")
-    res = remote_pad.exec_run("a_cmd_nononononoerr")
+    remote_pad.exec_run("pwd")
+    remote_pad.exec_run("a_cmd_nononononoerr")
 
-    res = remote_pad.with_path("project/autestoy_sim").exec_run("python t10s.py")
+    remote_pad.with_path("project/autestoy_sim").exec_run("python t10s.py")
 
     test_channel = remote_pad.create_channel("test_channel")
     assert test_channel.f_get_prompt
 
-    res = test_channel.run("ls")
-    res = test_channel.run("cd project/autestoy_sim")
-    res = test_channel.run("python t10s.py")
+    test_channel.run("ls")
+    test_channel.run("cd project/autestoy_sim")
+    test_channel.run("python t10s.py")
 
     remote_pad.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
     infer_cmd = remote_pad.long_running("python infer_log.py")

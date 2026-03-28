@@ -8,7 +8,7 @@ import time
 import warnings
 from typing import Self, Union, overload
 
-import asyncssh as assh
+# import asyncssh as assh
 import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect

@@ -27,16 +27,20 @@ def test_SSH(remote):
 
     remote_pad.with_path("project/autestoy_sim").exec_run("python t10s.py")
 
-    test_channel = remote_pad.create_channel("test_channel")
-    assert test_channel.f_get_prompt
+
+def test_Channel(ssh: SSH):
+    test_channel = ssh.create_channel("test_channel")
+    assert test_channel.f_get_prompt, f"prompt not found in {test_channel.prompt_now}"
 
     test_channel.run("ls")
     test_channel.run("cd project/autestoy_sim")
     test_channel.run("python t10s.py")
 
-    remote_pad.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
-    infer_cmd = remote_pad.long_running("python infer_log.py")
-    tail_cmd = remote_pad.long_running("tail -f ./log.txt")
+
+def test_SSH_long_running(ssh: SSH):
+    ssh.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
+    infer_cmd = ssh.long_running("python infer_log.py")
+    tail_cmd = ssh.long_running("tail -f ./log.txt")
 
     st_time = time.time()
     while time.time() - st_time < 10:
@@ -55,7 +59,7 @@ def test_SSH(remote):
     print(infer_cmd.end_time)
     print(tail_cmd.end_time)
 
-    test_channel.run("rm log.txt")
+    ssh.exec_run("rm log.txt")
 
 
 def test_Channel_prompt():
@@ -78,3 +82,5 @@ def test_Channel_prompt():
         res = prompt_compile.search(s)
         # print(f"{s} -> {res.group()}") if res else print(f"{s} -> None")
         assert res, f"{Channel.prompt_pattern_default} can not match {s}"
+
+

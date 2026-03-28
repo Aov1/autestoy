@@ -7,6 +7,8 @@ T = TypeVar("T")
 SSH_record: dict[str, Any] = dict()
 Channel_record: dict[str, Any] = dict()
 
+Meta_record: dict[float, Any] = {}
+
 
 def collect(storage_dict):
     """

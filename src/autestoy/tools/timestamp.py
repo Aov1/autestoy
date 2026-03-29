@@ -7,7 +7,7 @@ from ..export.collect import Meta_record, collect
 @collect(Meta_record)
 class TryTime:
     """
-    TryTime用于创建超时测试
+    TryTime用于创建超时测试，较为鸡肋，如果do_something阻塞不会退出。
     ```python
     tt = TryTime(5)
     while tt:

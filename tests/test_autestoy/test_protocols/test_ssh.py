@@ -121,3 +121,12 @@ def test_Channel_run_lines(ssh: SSH):
     assert isinstance(res, list)
     for r in res:
         assert isinstance(r, CmdRecord)
+
+
+def test_cd(ssh: SSH):
+    ssh.cd("project")
+    ssh.exec_run("ls")
+    ssh.cd("..")
+    ssh.exec_run("ls")
+    ssh.cd("a_err_path")
+    ssh.exec_run("ls")

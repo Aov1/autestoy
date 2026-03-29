@@ -99,8 +99,34 @@ class SSH:
         self.temp_path = path
         return self
 
+    def cd(self, path: str) -> CmdRecord:
+        """改变当前路径，作用于global_path，但是受到with_path方法维护的temp_path的影响\n
+        当temp_path非空执行cd后清除temp_path，优先级高于global_path\n
+        """
+        head_path_info, _ = self._path_process("")
+        record = CmdRecord(
+            f"cd {path}",
+            f"[{self.name}]{head_path_info} $",
+        )
+        self.cmds.append(record)
+        record.start_time = time.time()
+        print(record.get_fmt_prompt())
+        record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
+
+        while True:
+            if res := stderr.readline():
+                print(res.strip())
+                record.record_result(res.strip())
+                break
+            if res := stdout.readline():
+                self.global_path = res.strip()
+                break
+        record.record_end()
+        return record
+
     def _path_process(self, cmd: str) -> tuple[str, str]:
-        """处理路径逻辑，供给需要路径解算的方法，内部调用"""
+        """处理路径逻辑，供给需要路径解算的方法，内部调用\n
+        返回类维护的路径以及添加了cd命令的cmd"""
         head_path_info = ""
         if self.temp_path:
             processed_cmd = f"cd {self.temp_path} && {cmd}"
@@ -137,8 +163,12 @@ class SSH:
             cmd,
             f"[{self.name}]{head_path_info} $",
         )
+        self.cmds.append(record)
         print(record.get_fmt_prompt())
-        _stdin, stdout, _stderr = self.remote.exec_command(processed_cmd, get_pty=True)
+        record.start_time = time.time()
+        record.stdin, stdout, _stderr = self.remote.exec_command(
+            processed_cmd, get_pty=True
+        )
         out_str = ""
         while not stdout.channel.exit_status_ready():
             if stdout.channel.recv_ready():
@@ -153,7 +183,6 @@ class SSH:
                 print(tmp_out, end="")
         record.record_end()
         record.record_result(out_str)
-        self.cmds.append(record)
         return record
 
     def _long_running_task(self, cmd: str, record: CmdRecording):

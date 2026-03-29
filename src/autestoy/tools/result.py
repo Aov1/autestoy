@@ -7,7 +7,7 @@ from typing import override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
-from .ansi import remove_ansi
+from .ansi import AnsiColor, AnsiReset, remove_ansi
 
 # class CmdType(IntEnum):
 #     """命令类型枚举类，用于记录命令的类型"""
@@ -20,7 +20,7 @@ from .ansi import remove_ansi
 class TerminalStyle:
     """样式类，用于配置样式，使用ANSI转义"""
 
-    prompt: str = "\033[32m\033[1m"
+    prompt: str = AnsiColor.light_green
     command: str = ""
 
 
@@ -56,7 +56,7 @@ class CmdRecord:
         self.end_time = time.time()
         self.run_time = self.end_time - self.start_time
 
-    def get_run_time(self) -> float:
+    def get_run_time(self) -> float | None:
         """获取命令的运行时间，命令未结束返回已经运行的时长"""
         return (
             self.run_time
@@ -71,7 +71,7 @@ class CmdRecord:
     def get_fmt_prompt(self, colorful: bool = True) -> str:
         """获取格式化终端提示符，包括命令id、提示符和命令本身。\n
         终端显示和记录都基于此函数"""
-        tmp = f"{TerminalStyle.prompt}[{self.id}]:{self.prompt}\033[0m {self.cmd}"
+        tmp = f"{TerminalStyle.prompt}[{self.id}]:{self.prompt}{AnsiReset} {TerminalStyle.command}{self.cmd}{AnsiReset}"
         if colorful:
             return tmp
         return remove_ansi(tmp)
@@ -98,3 +98,8 @@ class CmdRecording(CmdRecord):
         if self.stdin is not None:
             self.stdin.write("\x03")
         self.stop_event.set()
+
+
+class Result:
+    def __init__(self) -> None:
+        pass

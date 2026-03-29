@@ -1,21 +1,23 @@
 import re
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 def str2num(s: str) -> tuple[int, int | float]:
     """
-    将支持的字符串格式转换为 ( 位数 , 实际值 ) 的tuple\n
-    进行数据截断处理等\n
+    将支持的字符串格式转换为 ( 位数 , 实际值 ) 的tuple，只包含正值\n
+    进行数据截断处理\n
     没有位数标志的返回 ( 0 , 实际值 )\n
     支持下划线和空格分隔长字符\n
     支持科学计数法\n
     支持的格式：
     - 纯数字字符串，带有可选的格式标识（如：456、123_u8）
     - 带小数点的数字字符串，带有可选的格式标识（如：1.23、2_f64）
-    - 科学计数法字符串（如：1e6 , -1.5e-3）
+    - 科学计数法字符串（如：1e6 , 1.5e-3）
     - 2|8|10|16进制字符串，带有可选的格式标识（如：0x1A、0b1010_u8）
     - 布尔值字符串（如：true、false）
+    - verilog位宽字符串（如：8'b10101010、8'sb10101010）
     """
     s = s.replace("_", "").replace(" ", "")
 
@@ -111,12 +113,41 @@ def str2num(s: str) -> tuple[int, int | float]:
         raise ValueError(f"Invalid integer string: {s}")
 
 
-class Bits:
+def get_value_width(value: int) -> int:
+    width = 0
+    while value := value >> 1:
+        width += 1
+    return width
+
+
+def num2byte(value: int, width: int = 0) -> NDArray:
+    if value < 0:
+        raise ValueError(f"Invalid negative integer: {value}")
+    if width <= 0:
+        width = get_value_width(value)
+
+    value = value % (1 << width)
+    bytes_cnt = (width + 7) // 8
+
+    bytes = value.to_bytes(bytes_cnt)
+    barray = np.frombuffer(bytes, dtype=np.uint8)
+    return barray
+
+
+class BitSet:
     def __init__(self, value: int | str, width: int) -> None:
+        if isinstance(value, int):
+            if value < 0:
+                raise ValueError(f"Invalid negative integer: {value}")
+            self.bytes_cnt = (width + 7) // 8
+            self.value = value & ((1 << width) - 1)
+
+        elif isinstance(value, str):
+            pass
         self.value = value
         self.width = width
 
 
 class Binary:
-    def __init__(self, value: int | str | Bits, force_width: int = 32) -> None:
+    def __init__(self, value: int | str | BitSet, force_width: int = 32) -> None:
         pass

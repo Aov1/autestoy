@@ -1,4 +1,6 @@
-from autestoy.tools.datatype import str2num
+import numpy as np
+
+from autestoy.tools.datatype import num2byte, str2num
 
 
 def test_str2num():
@@ -63,3 +65,13 @@ def test_str2num():
     assert str2num("8'1") == (8, int("0b11111111", 2))
     assert str2num("'0") == (1, int("0b0", 2))
     print("填充字符串 ok")
+
+
+def test_num2bits():
+    assert num2byte(1, 1) == np.array([1], dtype=np.uint8)
+    assert num2byte(1, 8) == np.array([1], dtype=np.uint8)
+    assert (
+        num2byte(0x12345678, 32).all()
+        == np.array([0x12, 0x34, 0x56, 0x78], dtype=np.uint8).all()
+    )
+    print("num2bits ok")

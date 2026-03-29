@@ -1,20 +1,27 @@
 import queue
 import threading as td
 import time
-from enum import IntEnum, auto
-from typing import Iterator
+
+# from enum import IntEnum, auto
+from typing import override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
 from .ansi import remove_ansi
 
+# class CmdType(IntEnum):
+#     """命令类型枚举类，用于记录命令的类型"""
 
-class CmdType(IntEnum):
-    """命令类型枚举类，用于记录命令的类型"""
+#     SSH_ONE_SHOT = auto()
+#     SSH_LONG_RUNNING = auto()
+#     SSH_INTERACTIVE = auto()
 
-    SSH_ONE_SHOT = auto()
-    SSH_LONG_RUNNING = auto()
-    SSH_INTERACTIVE = auto()
+
+class TerminalStyle:
+    """样式类，用于配置样式，使用ANSI转义"""
+
+    prompt: str = "\033[32m\033[1m"
+    command: str = ""
 
 
 class CmdRecord:
@@ -28,28 +35,21 @@ class CmdRecord:
         cls._cmd_id += 1
         return cls._cmd_id
 
-    def __init__(self, cmd: str, cmd_type: CmdType, prompt: str) -> None:
+    def __init__(self, cmd: str, prompt: str) -> None:
         """初始化，为了减少运行时间的误差，请在发送命令前紧接该初始化"""
         self.id: int = CmdRecord.id_generator()
-        self.cmd_type: CmdType = cmd_type
+        # self.cmd_type: CmdType = cmd_type
         self.prompt: str = prompt
         self.start_time: float = time.time()
         self.end_time: float | None = None
-        self.run_time: float
+        self.run_time: float | None = None
         self.cmd: str = cmd
-        self.result: str = ""
-        self.stdin: pk_ChannelStdinFile
-
-        # for long running
-        self.result_list: list[str]
-        self.fifo: queue.Queue
-        self.long_running_task: td.Thread
-        self.stop_event: td.Event
+        self.result: list[str] = []
+        self.stdin: pk_ChannelStdinFile | None = None
 
     def task_kill(self):
         if self.stdin is not None:
             self.stdin.write("\x03")
-        self.stop_event.set()
 
     def record_end(self) -> None:
         """手动记录命令结束时间，编写者保证在内部使用时记录，紧跟在命令结束之后"""
@@ -64,44 +64,37 @@ class CmdRecord:
             else time.time() - self.start_time
         )
 
-    def get_command(self) -> str:
-        """获取输入命令"""
-        return self.cmd
+    def record_result(self, result: str) -> None:
+        """记录命令的输出结果，包括ansi"""
+        self.result = result.replace("\r\n", "\n").strip().split("\n")
 
-    def get_result(self) -> str | Iterator:
-        """获取命令的输出结果"""
-        return self.result
+    def get_fmt_prompt(self, colorful: bool = True) -> str:
+        """获取格式化终端提示符，包括命令id、提示符和命令本身。\n
+        终端显示和记录都基于此函数"""
+        tmp = f"{TerminalStyle.prompt}[{self.id}]:{self.prompt}\033[0m {self.cmd}"
+        if colorful:
+            return tmp
+        return remove_ansi(tmp)
 
-    def record_result(self, result) -> None:
-        """记录命令的输出结果"""
-        if self.cmd_type is CmdType.SSH_ONE_SHOT and isinstance(result, str):
-            self._result = result
-        elif self.cmd_type is CmdType.SSH_LONG_RUNNING:
-            self.result_iter = result
-
-    def get_fmt_prompt(self) -> str:
-        """获取格式化终端提示符"""
-        tmp = f"[{self.id}]:{self.prompt} {self.cmd}"
-        # print(tmp)
-        return tmp
-
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # TODO
         out = self.get_fmt_prompt()
-        if self.cmd_type is CmdType.SSH_ONE_SHOT:
-            for line in self.get_result_lines():
-                out += f"{line}\n"
-        elif self.cmd_type is CmdType.SSH_LONG_RUNNING:
-            pass  # TODO:完成不退出指令
         return out
 
-    def get_result_lines(self) -> list[str]:  # TODO:完成不退出指令
-        if self.cmd_type is CmdType.SSH_ONE_SHOT:
-            return [remove_ansi(e.strip()) for e in self._result.strip().split("\r\n")]
-        else:
-            pass
+    def get_result(self) -> list[str]:
+        """获取命令的输出结果，去除ansi转义"""
+        return [remove_ansi(e) for e in self.result]
 
-    def get_result_line_iter(self) -> Iterator[str]:  # TODO:完成不退出指令
-        if self.cmd_type is CmdType.SSH_LONG_RUNNING:
-            return iter(self._result.split("\n"))
-        else:
-            pass
+
+class CmdRecording(CmdRecord):
+    def __init__(self, cmd: str, prompt: str) -> None:
+        super().__init__(cmd, prompt)
+        # for long running
+        self.fifo = queue.Queue()
+        self.stop_event = td.Event()
+        self.long_running_task: td.Thread
+
+    @override
+    def task_kill(self):
+        if self.stdin is not None:
+            self.stdin.write("\x03")
+        self.stop_event.set()

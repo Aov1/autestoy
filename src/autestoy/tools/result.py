@@ -1,20 +1,27 @@
 import queue
 import threading as td
 import time
-from enum import IntEnum, auto
-from typing import Iterator, override
+
+# from enum import IntEnum, auto
+from typing import override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
 from .ansi import remove_ansi
 
+# class CmdType(IntEnum):
+#     """命令类型枚举类，用于记录命令的类型"""
 
-class CmdType(IntEnum):
-    """命令类型枚举类，用于记录命令的类型"""
+#     SSH_ONE_SHOT = auto()
+#     SSH_LONG_RUNNING = auto()
+#     SSH_INTERACTIVE = auto()
 
-    SSH_ONE_SHOT = auto()
-    SSH_LONG_RUNNING = auto()
-    SSH_INTERACTIVE = auto()
+
+class TerminalStyle:
+    """样式类，用于配置样式，使用ANSI转义"""
+
+    prompt: str = "\033[32m\033[1m"
+    command: str = ""
 
 
 class CmdRecord:
@@ -61,16 +68,20 @@ class CmdRecord:
         """记录命令的输出结果，包括ansi"""
         self.result = result.replace("\r\n", "\n").strip().split("\n")
 
-    def get_fmt_prompt(self) -> str:
-        """获取格式化终端提示符"""
-        tmp = f"[{self.id}]:{self.prompt} {self.cmd}"
-        return tmp
+    def get_fmt_prompt(self, colorful: bool = True) -> str:
+        """获取格式化终端提示符，包括命令id、提示符和命令本身。\n
+        终端显示和记录都基于此函数"""
+        tmp = f"{TerminalStyle.prompt}[{self.id}]:{self.prompt}\033[0m {self.cmd}"
+        if colorful:
+            return tmp
+        return remove_ansi(tmp)
 
     def __str__(self) -> str:  # TODO
         out = self.get_fmt_prompt()
         return out
 
-    def get_result(self) -> list[str]:  # TODO:完成不退出指令
+    def get_result(self) -> list[str]:
+        """获取命令的输出结果，去除ansi转义"""
         return [remove_ansi(e) for e in self.result]
 
 

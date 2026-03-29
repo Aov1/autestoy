@@ -293,15 +293,10 @@ class Channel:
                 rcv = self.shell.recv(65535)  # 接收
 
                 buf += rcv  # 存入buf
-                # print(
-                #     f"DBG : BUF IN RUN : {buf.decode().replace('\r\n', '[rn]').replace('\r', '[r]')}"
-                # )
                 while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
                     buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
                     line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
                     line = line_b.decode().strip().replace("\r", "")
-                    # dbg
-                    # print(f"DBG: LINE: {line}")
 
                     if (
                         len(cmd_lines) == 0 and not f_cmd_lines_skip
@@ -313,10 +308,8 @@ class Channel:
                         and cmd_lines[0] == remove_ansi(line)  # 命令行与当前行相等
                         and len(cmd_lines) > 0  # 命令行未处理完毕
                     ):
-                        # print(f"DBG: pop cmd_lines = {cmd_lines}")
                         cmd_lines.pop(0)  # 弹出处理完的命令
                         continue
-                    # print(f"DBG: rm ansi line = {remove_ansi(line)}")
                     if self.prompt_complie.search(
                         remove_ansi(line)
                     ):  # 当前行与命令行提示符匹配
@@ -325,12 +318,8 @@ class Channel:
                         )  # 更新命令行提示符
                         f_prompt_received = True  # 命令行提示符处理完成标志置位
                         break
-                    # else:
-                    # print("NOT MATCH BREAK")
                     print(line)  # 处理时实时输出
                     res += line + "\r\n"  # 累积输出
-                # else:
-                #     print("???????")
                 if f_prompt_received:
                     break
 

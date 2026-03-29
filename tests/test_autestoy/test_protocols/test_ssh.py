@@ -1,5 +1,6 @@
 import re
 import time
+from pprint import pprint
 
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
 from autestoy.tools.result import CmdRecord
@@ -20,7 +21,7 @@ def test_RemoteConfig():
 
 def test_SSH(remote):
     """测试SSH连接 与 执行命令"""
-    remote_pad = SSH(remote, timeout=10)
+    remote_pad = SSH(remote, timeout=60)
     assert remote_pad.is_connected(), "SSH连接失败"
 
     remote_pad.exec_run("pwd")
@@ -60,7 +61,11 @@ def test_SSH_long_running(ssh: SSH):
     print(infer_cmd.end_time)
     print(tail_cmd.end_time)
 
-    ssh.exec_run("rm log.txt")
+    ssh.exec_run("cat log.txt")
+    ssh.exec_run("rm -rf log.txt")
+
+    for cmdr in ssh.cmds:
+        pprint(cmdr.get_result())
 
 
 def test_Channel_prompt():

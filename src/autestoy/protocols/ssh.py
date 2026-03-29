@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # import asyncio
-import queue
+# import queue
 import re
 import threading as td
 import time
@@ -13,7 +13,7 @@ import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect
 from ..tools.ansi import remove_ansi
-from ..tools.result import CmdRecord, CmdType
+from ..tools.result import CmdRecord, CmdRecording
 
 
 class RemoteConfig:
@@ -135,7 +135,6 @@ class SSH:
 
         record = CmdRecord(
             cmd,
-            CmdType.SSH_ONE_SHOT,
             f"[{self.name}]{head_path_info} $",
         )
         print(record.get_fmt_prompt())
@@ -157,36 +156,29 @@ class SSH:
         self.cmds.append(record)
         return record
 
-    def _long_running_task(self, cmd: str, record: CmdRecord):
-        stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
-
-        # record.record_result(iter(result))
-        # record.result_list = result
-        record.stop_event = td.Event()
-        record.stdin = stdin
+    def _long_running_task(self, cmd: str, record: CmdRecording):
+        record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
 
         while not record.stop_event.is_set():
             line = stdout.readline()
             if line != "":
                 print(f"[{record.id}]:", line, end="")
-                record.result_list.append(line)
+                record.result.append(line)
                 record.fifo.put(line)
-            time.sleep(0.001)
+            time.sleep(0.005)
         else:
             record.record_end()
             # dbg
             print("task end")
 
-    def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecord:
+    def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording:
         head_path_info, processed_cmd = self._path_process(cmd)
 
-        record = CmdRecord(
+        record = CmdRecording(
             cmd,
-            CmdType.SSH_LONG_RUNNING,
             f"[{self.name}]{head_path_info} $",
         )
-        record.fifo = queue.Queue()
-        record.result_list = []
+
         self.cmds.append(record)
         print(record.get_fmt_prompt())
         task = td.Thread(target=self._long_running_task, args=(processed_cmd, record))
@@ -238,10 +230,11 @@ class Channel:
                 if tmp := self.prompt_complie.search(remove_ansi(string)):
                     break
             time.sleep(0.01)
-        prompt = tmp.group()
+        prompt = tmp.group().replace("\r", "")
 
         self.f_get_prompt = True if self.prompt_complie.search(prompt) else False
         self.prompt_now = prompt
+        print(f"DBG:prompt_now = {prompt}")
 
     def set_name(self, name: str):
         """设置通道名称"""
@@ -249,13 +242,18 @@ class Channel:
 
     def run(self, cmd: str) -> CmdRecord:
         """执行命令，使用正则匹配终端提示符判断是否结束"""
+        # bug fix 速度过快会有遗留输出
+        if self.shell.recv_ready():
+            self.shell.recv(65535)
         buf = b""  # 处理缓冲区
-        cmd_lines = cmd.split("\n")  # 对于多行命令的处理
+        cmd_lines = (
+            cmd.replace("\r\n", "\n").replace("\r", "").strip().split("\n")
+        )  # 对于多行命令的处理
         f_cmd_lines_skip = False  # 是否处理完发送的命令
         f_prompt_received = False  # 是否匹配终端提示符
         res = ""  # 有效输出
 
-        record = CmdRecord(cmd, CmdType.SSH_ONE_SHOT, f"[{self.name}]{self.prompt_now}")
+        record = CmdRecord(cmd, f"[{self.name}]{self.prompt_now}")
         print(record.get_fmt_prompt())
         self.shell.send(
             bytes(cmd + "\r\n", "utf-8")
@@ -266,9 +264,15 @@ class Channel:
                 rcv = self.shell.recv(65535)  # 接收
 
                 buf += rcv  # 存入buf
-                while b"\r\n" in buf:  # buf中有换行符就一直处理
-                    line_b, buf = buf.split(b"\r\n", 1)  # 获取buf中的第一行
-                    line = line_b.decode()
+                # print(
+                #     f"DBG : BUF IN RUN : {buf.decode().replace('\r\n', '[rn]').replace('\r', '[r]')}"
+                # )
+                while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
+                    buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
+                    line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
+                    line = line_b.decode().strip().replace("\r", "")
+                    # dbg
+                    # print(f"DBG: LINE: {line}")
 
                     if (
                         len(cmd_lines) == 0 and not f_cmd_lines_skip
@@ -277,12 +281,13 @@ class Channel:
 
                     if (
                         not f_cmd_lines_skip  # 命令处理完成标志未置位
-                        and cmd_lines[0] == line  # 命令行与当前行相等
+                        and cmd_lines[0] == remove_ansi(line)  # 命令行与当前行相等
                         and len(cmd_lines) > 0  # 命令行未处理完毕
                     ):
+                        # print(f"DBG: pop cmd_lines = {cmd_lines}")
                         cmd_lines.pop(0)  # 弹出处理完的命令
                         continue
-
+                    # print(f"DBG: rm ansi line = {remove_ansi(line)}")
                     if self.prompt_complie.search(
                         remove_ansi(line)
                     ):  # 当前行与命令行提示符匹配
@@ -291,10 +296,12 @@ class Channel:
                         )  # 更新命令行提示符
                         f_prompt_received = True  # 命令行提示符处理完成标志置位
                         break
-
+                    # else:
+                    # print("NOT MATCH BREAK")
                     print(line)  # 处理时实时输出
                     res += line + "\r\n"  # 累积输出
-
+                # else:
+                #     print("???????")
                 if f_prompt_received:
                     break
 

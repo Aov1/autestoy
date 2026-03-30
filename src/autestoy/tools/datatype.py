@@ -1,4 +1,5 @@
 import re
+from typing import overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -120,9 +121,11 @@ def get_value_width(value: int) -> int:
     return width
 
 
-def num2byte(value: int, width: int = 0) -> NDArray:
+def num2bytes(value: int, width: int | None = None) -> NDArray:
     if value < 0:
         raise ValueError(f"Invalid negative integer: {value}")
+    # if width is None:
+    width = width if width else 0
     if width <= 0:
         width = get_value_width(value)
 
@@ -130,24 +133,78 @@ def num2byte(value: int, width: int = 0) -> NDArray:
     bytes_cnt = (width + 7) // 8
 
     bytes = value.to_bytes(bytes_cnt)
-    barray = np.frombuffer(bytes, dtype=np.uint8)
+    barray = np.frombuffer(bytes, dtype=np.uint8)[::-1]
     return barray
 
 
-class BitSet:
-    def __init__(self, value: int | str, width: int) -> None:
-        if isinstance(value, int):
-            if value < 0:
-                raise ValueError(f"Invalid negative integer: {value}")
+class Bits:
+    @overload
+    def __init__(self, value: int, width: int) -> None:
+        """
+        当value为int时必须指定宽度
+        """
+        ...
+
+    @overload
+    def __init__(self, value: str) -> None:
+        """
+        当value为str时，并且value可被解析成整数且带有位数标识，自动解析宽度
+        """
+        ...
+
+    @overload
+    def __init__(self, value: str, width: int) -> None:
+        """
+        当value为str，且value可被解析为不带宽度的int，width用于指定宽度\n
+        value可解析为带宽度的整形，且width给出了宽度时，取较大的宽度以保证无信息丢失
+        """
+        ...
+
+    def __init__(self, value: int | str, width: int | None = None) -> None:
+        if isinstance(value, int) and isinstance(width, int):
+            if value < 0 or width <= 0:
+                raise ValueError(f"Invalid negative integer: {value} or {width}")
+            self.width = width
             self.bytes_cnt = (width + 7) // 8
             self.value = value & ((1 << width) - 1)
-
+            self.bytes = num2bytes(value, width)
+            self.signed = False
         elif isinstance(value, str):
-            pass
-        self.value = value
-        self.width = width
+            gwidth, gvalue = str2num(value)
+            if gwidth != 0 and width is None:
+                if isinstance(gvalue, float) and abs(gvalue - int(gvalue)) < 1e-6:
+                    gvalue = int(gvalue)
+                else:
+                    raise ValueError(f"Invalid float: {value}")
+                self.signed = gwidth < 0
+                self.width = abs(gwidth)
+                self.bytes_cnt = (self.width + 7) // 8
+                self.value = gvalue
+                self.bytes = num2bytes(self.value, self.width)
+            elif gwidth == 0 and isinstance(width, int) and width > 0:
+                if isinstance(gvalue, float) and abs(gvalue - int(gvalue)) < 1e-6:
+                    gvalue = int(gvalue)
+                else:
+                    raise ValueError(f"Invalid float: {value}")
+                self.signed = False
+                self.width = width
+                self.bytes_cnt = (self.width + 7) // 8
+                self.value = gvalue & ((1 << self.width) - 1)
+                self.bytes = num2bytes(self.value, self.width)
+            elif gwidth != 0 and isinstance(width, int):
+                if isinstance(gvalue, float) and abs(gvalue - int(gvalue)) < 1e-6:
+                    gvalue = int(gvalue)
+                else:
+                    raise ValueError(f"Invalid float: {value}")
+                self.signed = gwidth < 0
+                self.width = max(width, abs(gwidth))
+                self.bytes_cnt = (self.width + 7) // 8
+                self.value = gvalue & ((1 << self.width) - 1)
+                self.bytes = num2bytes(self.value, self.width)
+            else:
+                raise ValueError(f"Invalid value: {value} match {width}")
 
 
 class Binary:
-    def __init__(self, value: int | str | BitSet, force_width: int = 32) -> None:
+    def __init__(self, value: int | str | Bits, force_width: int = 32) -> None:
         pass

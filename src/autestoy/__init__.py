@@ -1,7 +1,7 @@
 import time
 
 from .export.collect import Channel_record, Meta_record, SSH_record
-from .export.term import Term
+from .export.term import Term, TermStyle
 from .protocols.ssh import SSH, RemoteConfig
 from .tools.result import CmdRecord
 from .tools.timestamp import TryTime
@@ -16,6 +16,7 @@ __all__ = [
     "Meta_record",
     "SSH_record",
     "Term",
+    "TermStyle",
     "TimeBase",
 ]
 

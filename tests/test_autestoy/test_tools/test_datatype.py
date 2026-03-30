@@ -1,6 +1,6 @@
 import numpy as np
 
-from autestoy.tools.datatype import num2byte, str2num
+from autestoy.tools.datatype import Bits, num2bytes, str2num
 
 
 def test_str2num():
@@ -68,10 +68,37 @@ def test_str2num():
 
 
 def test_num2bits():
-    assert num2byte(1, 1) == np.array([1], dtype=np.uint8)
-    assert num2byte(1, 8) == np.array([1], dtype=np.uint8)
+    assert num2bytes(1, 1) == np.array([1], dtype=np.uint8)
+    assert num2bytes(1, 8) == np.array([1], dtype=np.uint8)
     assert (
-        num2byte(0x12345678, 32).all()
-        == np.array([0x12, 0x34, 0x56, 0x78], dtype=np.uint8).all()
+        num2bytes(0x12345678, 32).all()
+        == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
     )
     print("num2bits ok")
+
+
+def test_Bits():
+    t = Bits(0x12345678, 32)
+    assert t.value == 0x12345678
+    assert t.width == 32
+    assert t.bytes_cnt == 4
+    assert t.bytes.all() == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
+
+    t = Bits("0b111110101010", 8)
+    assert t.value == 0xAA
+    assert t.width == 8
+    assert t.bytes_cnt == 1
+    assert t.bytes.all() == np.array([0xAA], dtype=np.uint8).all()
+
+    t = Bits("32'h1234ABCD")
+    assert t.value == 0x1234ABCD
+    assert t.width == 32
+    assert t.bytes_cnt == 4
+    assert t.bytes.all() == np.array([0xCD, 0xAB, 0x34, 0x12], dtype=np.uint8).all()
+
+    t = Bits("16'h1234ABCD")
+    assert t.value == 0xABCD
+    assert t.width == 16
+    assert t.bytes_cnt == 2
+    assert t.bytes.all() == np.array([0xCD, 0xAB], dtype=np.uint8).all()
+    print("Bits ok")

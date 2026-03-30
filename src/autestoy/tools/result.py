@@ -7,7 +7,8 @@ from typing import override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
-from .ansi import AnsiColor, AnsiReset, remove_ansi
+from ..export.term import TermStyle
+from .ansi import AnsiReset, remove_ansi
 
 # class CmdType(IntEnum):
 #     """命令类型枚举类，用于记录命令的类型"""
@@ -17,11 +18,11 @@ from .ansi import AnsiColor, AnsiReset, remove_ansi
 #     SSH_INTERACTIVE = auto()
 
 
-class TerminalStyle:
-    """样式类，用于配置样式，使用ANSI转义"""
+# class TerminalStyle:
+#     """样式类，用于配置样式，使用ANSI转义"""
 
-    prompt: str = AnsiColor.light_green
-    command: str = ""
+#     prompt: str = AnsiColor.light_green
+#     command: str = ""
 
 
 class CmdRecord:
@@ -44,7 +45,7 @@ class CmdRecord:
         self.end_time: float | None = None
         self.run_time: float | None = None
         self.cmd: str = cmd
-        self.result: list = []
+        self.result: list[tuple[float, str]] = []
         self.stdin: pk_ChannelStdinFile | None = None
 
     def task_kill(self):
@@ -64,9 +65,9 @@ class CmdRecord:
             else time.time() - self.start_time
         )
 
-    def record_result(self, result: str) -> None:
-        """记录命令的输出结果，包括ansi"""
-        self.result = result.replace("\r\n", "\n").strip().split("\n")
+    # def record_result(self, result: str) -> None:
+    #     """记录命令的输出结果，包括ansi"""
+    #     self.result = result.replace("\r\n", "\n").strip().split("\n")
 
     def record_result_bata(self, result: list[tuple[float, str]]) -> None:
         """记录命令的输出结果，包括ansi"""
@@ -75,7 +76,7 @@ class CmdRecord:
     def get_fmt_prompt(self, colorful: bool = True) -> str:
         """获取格式化终端提示符，包括命令id、提示符和命令本身。\n
         终端显示和记录都基于此函数"""
-        tmp = f"{TerminalStyle.prompt}[{self.id}]:{self.prompt}{AnsiReset} {TerminalStyle.command}{self.cmd}{AnsiReset}"
+        tmp = f"{TermStyle.prompt_font_color}{TermStyle.prompt_background_color}[{self.id}]:{self.prompt}{AnsiReset} {TermStyle.msg_font_color}{TermStyle.msg_background_color}{self.cmd}{AnsiReset}"
         if colorful:
             return tmp
         return remove_ansi(tmp)
@@ -86,7 +87,7 @@ class CmdRecord:
 
     def get_result(self) -> list[str]:
         """获取命令的输出结果，去除ansi转义"""
-        return [remove_ansi(e) for e in self.result]
+        return [remove_ansi(e[1]) for e in self.result]
 
 
 class CmdRecording(CmdRecord):

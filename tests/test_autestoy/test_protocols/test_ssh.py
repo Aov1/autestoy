@@ -2,12 +2,15 @@ import re
 import time
 from pprint import pprint
 
+from conftest import log
+
 from autestoy.export.term import Term
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
 from autestoy.tools.result import CmdRecord
 
 
 def test_RemoteConfig():
+    log("test_RemoteConfig")
     """测试RemoteConfig基础配置 与 方法"""
     host = RemoteConfig("test", "127.0.0.1", "password")
     assert host.user == "test"
@@ -21,6 +24,7 @@ def test_RemoteConfig():
 
 
 def test_SSH(remote):
+    log("test_SSH")
     """测试SSH连接 与 执行命令"""
     remote_pad = SSH(remote, timeout=60)
     assert remote_pad.is_connected(), "SSH连接失败"
@@ -32,6 +36,7 @@ def test_SSH(remote):
 
 
 def test_Channel(ssh: SSH):
+    log("test_Channel")
     test_channel = ssh.create_channel("test_channel")
     assert test_channel.f_get_prompt, f"prompt not found in {test_channel.prompt_now}"
 
@@ -41,6 +46,7 @@ def test_Channel(ssh: SSH):
 
 
 def test_SSH_long_running(ssh: SSH):
+    log("test_SSH_long_running")
     ssh.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
     infer_cmd = ssh.long_running("python infer_log.py")
     tail_cmd = ssh.long_running("tail -f ./log.txt")
@@ -70,6 +76,7 @@ def test_SSH_long_running(ssh: SSH):
 
 
 def test_Channel_prompt():
+    log("test_Channel_prompt")
     prompt_compile = re.compile(Channel.prompt_pattern_default)
     test_cases = [
         "$",
@@ -92,6 +99,7 @@ def test_Channel_prompt():
 
 
 def test_Channel_run_lines(ssh: SSH):
+    log("test_Channel_run_lines")
     ch = ssh.create_channel()
     cmds = """
     ls
@@ -125,6 +133,7 @@ def test_Channel_run_lines(ssh: SSH):
 
 
 def test_cd(ssh: SSH):
+    log("test_cd")
     ssh.cd("project")
     ssh.exec_run("ls")
     ssh.cd("..")
@@ -133,14 +142,15 @@ def test_cd(ssh: SSH):
     ssh.exec_run("ls")
 
 
-def test_exec_run_bata(ssh: SSH):
-    ssh.exec_run_bata("ls")
-    ssh.with_path("project/autestoy_sim").exec_run_bata("python t10s.py")
+def test_exec_run(ssh: SSH):
+    log("test_exec_run")
+    ssh.exec_run("ls")
+    ssh.with_path("project/autestoy_sim").exec_run("python t10s.py")
 
     Term.sw_absolute_timestamp = True
-    ssh.exec_run_bata("ls")
-    ssh.with_path("project/autestoy_sim").exec_run_bata("python t10s.py")
+    ssh.exec_run("ls")
+    ssh.with_path("project/autestoy_sim").exec_run("python t10s.py")
 
     Term.sw_timestamp = False
-    ssh.exec_run_bata("ls")
-    ssh.with_path("project/autestoy_sim").exec_run_bata("python t10s.py")
+    ssh.exec_run("ls")
+    ssh.with_path("project/autestoy_sim").exec_run("python t10s.py")

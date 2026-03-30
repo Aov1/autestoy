@@ -23,3 +23,8 @@ def ssh(remote: RemoteConfig):
         e.shell.close()
     ssh_t.remote.close()
     print("ssh closed")
+
+
+# @pytest.fixture(scope="session")
+def log(title: str):
+    print(f"\n\033[31m{title}\033[0m")

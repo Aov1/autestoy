@@ -44,7 +44,7 @@ class CmdRecord:
         self.end_time: float | None = None
         self.run_time: float | None = None
         self.cmd: str = cmd
-        self.result: list[str] = []
+        self.result: list = []
         self.stdin: pk_ChannelStdinFile | None = None
 
     def task_kill(self):
@@ -67,6 +67,10 @@ class CmdRecord:
     def record_result(self, result: str) -> None:
         """记录命令的输出结果，包括ansi"""
         self.result = result.replace("\r\n", "\n").strip().split("\n")
+
+    def record_result_bata(self, result: list[tuple[float, str]]) -> None:
+        """记录命令的输出结果，包括ansi"""
+        self.result = result
 
     def get_fmt_prompt(self, colorful: bool = True) -> str:
         """获取格式化终端提示符，包括命令id、提示符和命令本身。\n

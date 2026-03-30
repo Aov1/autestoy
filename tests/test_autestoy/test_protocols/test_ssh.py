@@ -2,6 +2,7 @@ import re
 import time
 from pprint import pprint
 
+from autestoy.export.term import Term
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
 from autestoy.tools.result import CmdRecord
 
@@ -130,3 +131,16 @@ def test_cd(ssh: SSH):
     ssh.exec_run("ls")
     ssh.cd("a_err_path")
     ssh.exec_run("ls")
+
+
+def test_exec_run_bata(ssh: SSH):
+    ssh.exec_run_bata("ls")
+    ssh.with_path("project/autestoy_sim").exec_run_bata("python t10s.py")
+
+    Term.sw_absolute_timestamp = True
+    ssh.exec_run_bata("ls")
+    ssh.with_path("project/autestoy_sim").exec_run_bata("python t10s.py")
+
+    Term.sw_timestamp = False
+    ssh.exec_run_bata("ls")
+    ssh.with_path("project/autestoy_sim").exec_run_bata("python t10s.py")

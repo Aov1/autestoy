@@ -12,6 +12,7 @@ from typing import Self, Union, overload
 import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect
+from ..export.term import Term
 from ..tools.ansi import remove_ansi
 from ..tools.result import CmdRecord, CmdRecording
 
@@ -49,6 +50,7 @@ class SSH:
         self.global_path: str | None = None
         self.temp_path: str | None = None
         self.base_path: str | None = None
+        self.start_time: float | None = None
         try:
             self._connect()
         except Exception as e:
@@ -58,6 +60,7 @@ class SSH:
             _, stdout, _ = self.remote.exec_command("pwd")
             self.base_path = stdout.read().decode().strip()
             print(self.base_path)
+            self.connect_time = time.time()
 
     def is_connected(self) -> bool:
         """判断是否已连接到远程主机"""
@@ -185,6 +188,47 @@ class SSH:
         record.record_result(out_str)
         return record
 
+    def exec_run_bata(self, cmd: str) -> CmdRecord:
+        """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n
+        与exec_run的区别在于，exec_run_bata会记录每一行命令的执行时间，而exec_run不会\n
+        实现方式也由recv改为readline
+        ```python
+        remote_config = RemoteConfig(
+            user="user",
+            ip="192.168.0.32",
+            password="this_is_password",
+            port=8022,
+        ).set_name("HUAWEI MATEPAD 12.2")
+        remote_pc = SSH(remote_config)
+        remote_pc.exec_run('pwd')
+        # [1]:[HUAWEI MATEPAD 12.2] $ pwd
+        # /data/data/com.termux/files/home
+        ```
+        实现方式为exec_command方法，每次执行都相当于开启一个新的通道，因此没有上下文保持（例如cd到新的路径后，在下一个exec_run中又进入到默认路径)
+
+        SSH类实现了with_path和set_global_path方法，用于exec_run设置临时路径和全局路径
+        """
+        head_path_info, processed_cmd = self._path_process(cmd)
+
+        record = CmdRecord(
+            cmd,
+            f"[{self.name}]{head_path_info} $",
+        )
+        self.cmds.append(record)
+        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+        record.stdin, stdout, _stderr = self.remote.exec_command(
+            processed_cmd, get_pty=True
+        )
+        while not stdout.channel.exit_status_ready():
+            if (tmp_out := stdout.readline().strip()) != "":
+                record.result.append(Term.putsln(tmp_out))
+            time.sleep(0.01)
+        else:
+            if (tmp_out := stdout.readline().strip()) != "":
+                record.result.append(Term.putsln(tmp_out))
+        record.record_end()
+        return record
+
     def _long_running_task(self, cmd: str, record: CmdRecording):
         record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
 
@@ -243,6 +287,7 @@ class Channel:
     ):
         """初始化通道，需要指定SSH"""
         self.shell = ssh.remote.invoke_shell()
+        self.start_time = time.time()
         self.name = name if name else "ch_" + str(Channel.id_generator())
         self.prompt_complie = re.compile(prompt_pattern)
         self.cmds: list[CmdRecord] = []

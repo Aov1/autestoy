@@ -356,7 +356,7 @@ class Channel:
 
                     if (
                         not f_cmd_lines_skip  # 命令处理完成标志未置位
-                        and cmd_lines[0] == remove_ansi(line)  # 命令行与当前行相等
+                        and cmd_lines[0] in remove_ansi(line)  # 命令行与当前行相等
                         and len(cmd_lines) > 0  # 命令行未处理完毕
                     ):
                         cmd_lines.pop(0)  # 弹出处理完的命令
@@ -369,8 +369,6 @@ class Channel:
                         )  # 更新命令行提示符
                         f_prompt_received = True  # 命令行提示符处理完成标志置位
                         break
-                    # print(line)  # 处理时实时输出
-                    # res += line + "\r\n"  # 累积输出
                     record.result.append(Term.putsln(line))
                 if f_prompt_received:
                     break

@@ -105,6 +105,8 @@ class SSH:
     def cd(self, path: str) -> CmdRecord:
         """改变当前路径，作用于global_path，但是受到with_path方法维护的temp_path的影响\n
         当temp_path非空执行cd后清除temp_path，优先级高于global_path\n
+        不管被哪个路径影响，最后根据运行返回的路径覆盖global_path。\n
+        路径错误或不存在不会对gloabl_path赋值。
         """
         head_path_info, _ = self._path_process("")
         record = CmdRecord(
@@ -119,8 +121,6 @@ class SSH:
         while True:
             if res := stderr.readline().strip():
                 record.result.append(Term.putsln(res))
-                # print(res.strip())
-                # record.record_result(res.strip())
                 break
             if res := stdout.readline():
                 self.global_path = res.strip()
@@ -142,52 +142,6 @@ class SSH:
         else:
             processed_cmd = cmd
         return head_path_info, processed_cmd
-
-    # def exec_run(self, cmd: str) -> CmdRecord:
-    #     """exec_run，执行命令，返回输出信息记录类CmdRecord
-    #     ```python
-    #     remote_config = RemoteConfig(
-    #         user="user",
-    #         ip="192.168.0.32",
-    #         password="this_is_password",
-    #         port=8022,
-    #     ).set_name("HUAWEI MATEPAD 12.2")
-    #     remote_pc = SSH(remote_config)
-    #     remote_pc.exec_run('pwd')
-    #     # [1]:[HUAWEI MATEPAD 12.2] $ pwd
-    #     # /data/data/com.termux/files/home
-    #     ```
-    #     实现方式为exec_command方法，每次执行都相当于开启一个新的通道，因此没有上下文保持（例如cd到新的路径后，在下一个exec_run中又进入到默认路径)
-
-    #     SSH类实现了with_path和set_global_path方法，用于exec_run设置临时路径和全局路径
-    #     """
-    #     head_path_info, processed_cmd = self._path_process(cmd)
-
-    #     record = CmdRecord(
-    #         cmd,
-    #         f"[{self.name}]{head_path_info} $",
-    #     )
-    #     self.cmds.append(record)
-    #     print(record.get_fmt_prompt())
-    #     record.start_time = time.time()
-    #     record.stdin, stdout, _stderr = self.remote.exec_command(
-    #         processed_cmd, get_pty=True
-    #     )
-    #     out_str = ""
-    #     while not stdout.channel.exit_status_ready():
-    #         if stdout.channel.recv_ready():
-    #             tmp_out = stdout.channel.recv(1024).decode()
-    #             out_str += tmp_out
-    #             print(tmp_out, end="")
-    #         time.sleep(0.01)
-    #     else:
-    #         if stdout.channel.recv_ready():
-    #             tmp_out = stdout.channel.recv(1024).decode()
-    #             out_str += tmp_out
-    #             print(tmp_out, end="")
-    #     record.record_end()
-    #     record.record_result(out_str)
-    #     return record
 
     def exec_run(self, cmd: str) -> CmdRecord:
         """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n

@@ -29,6 +29,9 @@ def test_str2num():
     assert str2num("0b110011") == (0, int("0b110011", 2))
     assert str2num("0b11 0011_i32") == (-32, int("0b11_0011", 2))
     assert str2num("0b11 0011_u32") == (32, int("0b11_0011", 2))
+    res = str2num("0b11111010101010")
+    print(res[0], type(res[1]))
+    assert res[0] == 0 and res[1] == int("0b11111010101010", 2)
     print("二进制字符串 ok")
 
     assert str2num("0o233") == (0, int("0o233", 8))

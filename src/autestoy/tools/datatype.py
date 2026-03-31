@@ -172,30 +172,33 @@ class Bits:
         elif isinstance(value, str):
             gwidth, gvalue = str2num(value)
             if gwidth != 0 and width is None:
-                if isinstance(gvalue, float) and abs(gvalue - int(gvalue)) < 1e-6:
-                    gvalue = int(gvalue)
-                else:
-                    raise ValueError(f"Invalid float: {value}")
+                if isinstance(gvalue, float):
+                    if abs(gvalue - int(gvalue)) < 1e-6:
+                        gvalue = int(gvalue)
+                    else:
+                        raise ValueError(f"Invalid float: {value}")
                 self.signed = gwidth < 0
                 self.width = abs(gwidth)
                 self.bytes_cnt = (self.width + 7) // 8
                 self.value = gvalue
                 self.bytes = num2bytes(self.value, self.width)
             elif gwidth == 0 and isinstance(width, int) and width > 0:
-                if isinstance(gvalue, float) and abs(gvalue - int(gvalue)) < 1e-6:
-                    gvalue = int(gvalue)
-                else:
-                    raise ValueError(f"Invalid float: {value}")
+                if isinstance(gvalue, float):
+                    if abs(gvalue - int(gvalue)) < 1e-6:
+                        gvalue = int(gvalue)
+                    else:
+                        raise ValueError(f"Invalid float: {value}")
                 self.signed = False
                 self.width = width
                 self.bytes_cnt = (self.width + 7) // 8
                 self.value = gvalue & ((1 << self.width) - 1)
                 self.bytes = num2bytes(self.value, self.width)
             elif gwidth != 0 and isinstance(width, int):
-                if isinstance(gvalue, float) and abs(gvalue - int(gvalue)) < 1e-6:
-                    gvalue = int(gvalue)
-                else:
-                    raise ValueError(f"Invalid float: {value}")
+                if isinstance(gvalue, float):
+                    if abs(gvalue - int(gvalue)) < 1e-6:
+                        gvalue = int(gvalue)
+                    else:
+                        raise ValueError(f"Invalid float: {value}")
                 self.signed = gwidth < 0
                 self.width = max(width, abs(gwidth))
                 self.bytes_cnt = (self.width + 7) // 8

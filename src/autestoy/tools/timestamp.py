@@ -1,64 +1,65 @@
-# import threading as td
+from __future__ import annotations
+
 import time
+from datetime import datetime, timezone
+from typing import Self
 
-from ..export.collect import Meta_record, collect
 
-
-@collect(Meta_record)
-class TryTime:
+class Timestamp:
     """
-    TryTime用于创建超时测试，较为鸡肋，如果do_something阻塞不会退出。
-    ```python
-    tt = TryTime(5)
-    while tt:
-        do_something()
-    ```
-    得到输出
-    ```bash
-    TryTime [1]@5s start at 1774676789.2699938
-    TryTime [1]@5s Time Out 1774676794.2699955
-    ```
-
+    Timestamp用于记录时间戳，并提供可自定义的格式化输出以及转换
     """
 
-    _try_time_id = 0
+    sw_utc: bool = False
+    fmt: str = "%Y-%m-%d %H:%M:%S.%f"
+    millis_width: int = 3
 
     @classmethod
-    def _id_generator(cls) -> int:
-        cls._try_time_id += 1
-        return cls._try_time_id
+    def len(cls) -> int:
+        return len(cls.fmt) + 2 + cls.millis_width - 2
 
-    def __init__(self, timeout_second: float):
-        # self._task: td.Thread | None = None
-        self.id = self._id_generator()
-        self.timeout = timeout_second
-        self.end_time: float
-        self.start_time = time.time()
-        self.name = self.start_time
-        print(f"TryTime [{self.id}]@{self.timeout}s start at {self.start_time}")
+    def __init__(self, now_time: float | None = None):
+        if now_time:
+            self.timestamp = now_time
+        else:
+            self.timestamp = time.time()
 
-    def _check(self) -> bool:
-        tmp = time.time() - self.start_time < self.timeout
-        if not tmp:
-            self.end_time = time.time()
-            print(f"TryTime [{self.id}]@{self.timeout}s Time Out {self.end_time}")
-        return tmp
+    def __str__(self):
+        res = datetime.fromtimestamp(
+            self.timestamp, tz=timezone.utc if Timestamp.sw_utc else None
+        )
+        return res.strftime(Timestamp.fmt)[: -Timestamp.millis_width]
 
-    # def _check_task(self):
-    #     kill = td.Event()
-    #     while not kill.is_set():
-    #         if not self._check():
-    #             kill.set()
+    def __format__(self, format_spec):
+        # 委托给 float 的格式化逻辑
+        return format(self.__str__(), format_spec)
 
-    def __bool__(self):
-        return self._check()
+    def __sub__(self, other: Timestamp | float) -> float:
+        if isinstance(other, Timestamp):
+            return self.timestamp - other.timestamp
+        else:
+            return self.timestamp - other
 
-    # def __enter__(self):
-    #     task = td.Thread(target=self._check_task)
-    #     task.daemon = True
-    #     # self._task = task
-    #     task.start()
-    #     return self
+    def __add__(self, other: Timestamp | float) -> float:
+        if isinstance(other, Timestamp):
+            return self.timestamp + other.timestamp
+        else:
+            return self.timestamp + other
 
-    # def __exit__(self, exc_type, exc_val, exc_tb):
-    #     return True
+    def __radd__(self, other: Timestamp | float) -> float:
+        return self.__add__(other)
+
+    def __rsub__(self, other: Timestamp | float) -> float:
+        if isinstance(other, Timestamp):
+            return other.timestamp - self.timestamp
+        else:
+            return other - self.timestamp
+
+    def update_timestamp(self):
+        self.timestamp = time.time()
+
+    def to_float(self) -> float:
+        return self.timestamp
+
+    def to_seconds_from(self, base: float) -> float:
+        return self.timestamp - base

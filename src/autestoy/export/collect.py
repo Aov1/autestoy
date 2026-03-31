@@ -6,7 +6,7 @@ from typing import Any
 SSH_record: dict[str, Any] = dict()  # 记录所有创建的SSH类
 Channel_record: dict[str, Any] = dict()  # 记录所有创建的Channel
 
-Meta_record: dict[float, Any] = {}  #
+# Meta_record: dict[float, Any] = {}  #
 
 
 def collect(storage_dict):

@@ -8,13 +8,15 @@ import time
 import warnings
 from typing import Self, Union, overload
 
-# import asyncssh as assh
 import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect
 from ..export.term import Term
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.result import CmdRecord, CmdRecording
+
+# import asyncssh as assh
+from ..tools.timestamp import Timestamp
 
 
 class RemoteConfig:
@@ -114,7 +116,7 @@ class SSH:
             f"[{self.name}]{head_path_info} $",
         )
         self.cmds.append(record)
-        record.start_time = time.time()
+        record.start_time = Timestamp()
         print(record.get_fmt_prompt())
         record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
 
@@ -246,7 +248,7 @@ class Channel:
     ):
         """初始化通道，需要指定SSH"""
         self.shell = ssh.remote.invoke_shell()
-        self.start_time = time.time()
+        self.start_time = Timestamp()
         self.name = name if name else "ch_" + str(Channel.id_generator())
         self.prompt_complie = re.compile(prompt_pattern)
         self.cmds: list[CmdRecord] = []

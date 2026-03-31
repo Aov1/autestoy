@@ -8,21 +8,8 @@ from typing import override
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
 from ..export.term import TermStyle
+from ..tools.timestamp import Timestamp
 from .ansi import AnsiReset, remove_ansi
-
-# class CmdType(IntEnum):
-#     """命令类型枚举类，用于记录命令的类型"""
-
-#     SSH_ONE_SHOT = auto()
-#     SSH_LONG_RUNNING = auto()
-#     SSH_INTERACTIVE = auto()
-
-
-# class TerminalStyle:
-#     """样式类，用于配置样式，使用ANSI转义"""
-
-#     prompt: str = AnsiColor.light_green
-#     command: str = ""
 
 
 class CmdRecord:
@@ -39,13 +26,12 @@ class CmdRecord:
     def __init__(self, cmd: str, prompt: str) -> None:
         """初始化，为了减少运行时间的误差，请在发送命令前紧接该初始化"""
         self.id: int = CmdRecord.id_generator()
-        # self.cmd_type: CmdType = cmd_type
         self.prompt: str = prompt
-        self.start_time: float = time.time()
-        self.end_time: float | None = None
+        self.start_time: Timestamp = Timestamp()
+        self.end_time: Timestamp | None = None
         self.run_time: float | None = None
         self.cmd: str = cmd
-        self.result: list[tuple[float, str]] = []
+        self.result: list[tuple[Timestamp, str]] = []
         self.stdin: pk_ChannelStdinFile | None = None
 
     def task_kill(self):
@@ -54,7 +40,7 @@ class CmdRecord:
 
     def record_end(self) -> None:
         """手动记录命令结束时间，编写者保证在内部使用时记录，紧跟在命令结束之后"""
-        self.end_time = time.time()
+        self.end_time = Timestamp()
         self.run_time = self.end_time - self.start_time
 
     def get_run_time(self) -> float | None:
@@ -69,7 +55,7 @@ class CmdRecord:
     #     """记录命令的输出结果，包括ansi"""
     #     self.result = result.replace("\r\n", "\n").strip().split("\n")
 
-    def record_result_bata(self, result: list[tuple[float, str]]) -> None:
+    def record_result_bata(self, result: list[tuple[Timestamp, str]]) -> None:
         """记录命令的输出结果，包括ansi"""
         self.result = result
 

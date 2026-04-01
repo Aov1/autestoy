@@ -7,7 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncssh>=2.22.0",
     "nicegui>=3.9.0",
-    "numpy>=2.4.3",
     "paramiko>=4.0.0",
     "pyserial>=3.5",
     "reportlib>=3.4.0",

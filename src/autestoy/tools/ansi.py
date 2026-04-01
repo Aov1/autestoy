@@ -32,6 +32,7 @@ class AnsiStyle(StrEnum):
 
 
 class AnsiColor(StrEnum):
+    none = ""
     black = "\033[30m"
     red = "\033[31m"
     green = "\033[32m"
@@ -52,6 +53,7 @@ class AnsiColor(StrEnum):
 
 
 class AnsiBackground(StrEnum):
+    none = ""
     black = "\033[40m"
     red = "\033[41m"
     green = "\033[42m"

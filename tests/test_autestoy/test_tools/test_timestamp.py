@@ -1,17 +1,11 @@
 import time
 
-from autestoy.tools.timestamp import TryTime
+from autestoy.tools.timestamp import Timestamp
 
 
-def test_TryTime():
-    print()
-    ts = TryTime(5)
-    while ts:
-        # pass
-        print("while try time test !")
-        time.sleep(0.8)
-
-    # with TryTime(2) as ts:
-    #     print("with try time test !")
-    #     time.sleep(10)
-    #     print("with try time test Fial!")
+def test_Timestamp():
+    now = time.time()
+    ts = Timestamp(now)
+    print(ts)
+    Timestamp.sw_utc = True
+    print(ts)

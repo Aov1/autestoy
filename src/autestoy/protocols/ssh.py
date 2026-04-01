@@ -8,12 +8,15 @@ import time
 import warnings
 from typing import Self, Union, overload
 
-# import asyncssh as assh
 import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect
-from ..tools.ansi import remove_ansi
+from ..export.term import Term
+from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.result import CmdRecord, CmdRecording
+
+# import asyncssh as assh
+from ..tools.timestamp import Timestamp
 
 
 class RemoteConfig:
@@ -49,6 +52,7 @@ class SSH:
         self.global_path: str | None = None
         self.temp_path: str | None = None
         self.base_path: str | None = None
+        self.start_time: float | None = None
         try:
             self._connect()
         except Exception as e:
@@ -58,6 +62,7 @@ class SSH:
             _, stdout, _ = self.remote.exec_command("pwd")
             self.base_path = stdout.read().decode().strip()
             print(self.base_path)
+            self.connect_time = time.time()
 
     def is_connected(self) -> bool:
         """判断是否已连接到远程主机"""
@@ -99,8 +104,35 @@ class SSH:
         self.temp_path = path
         return self
 
+    def cd(self, path: str) -> CmdRecord:
+        """改变当前路径，作用于global_path，但是受到with_path方法维护的temp_path的影响\n
+        当temp_path非空执行cd后清除temp_path，优先级高于global_path\n
+        不管被哪个路径影响，最后根据运行返回的路径覆盖global_path。\n
+        路径错误或不存在不会对gloabl_path赋值。
+        """
+        head_path_info, _ = self._path_process("")
+        record = CmdRecord(
+            f"cd {path}",
+            f"[{self.name}]{head_path_info} $",
+        )
+        self.cmds.append(record)
+        record.start_time = Timestamp()
+        print(record.get_fmt_prompt())
+        record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
+
+        while True:
+            if res := stderr.readline().strip():
+                record.result.append(Term.putsln(res))
+                break
+            if res := stdout.readline():
+                self.global_path = res.strip()
+                break
+        record.record_end()
+        return record
+
     def _path_process(self, cmd: str) -> tuple[str, str]:
-        """处理路径逻辑，供给需要路径解算的方法，内部调用"""
+        """处理路径逻辑，供给需要路径解算的方法，内部调用\n
+        返回类维护的路径以及添加了cd命令的cmd"""
         head_path_info = ""
         if self.temp_path:
             processed_cmd = f"cd {self.temp_path} && {cmd}"
@@ -114,7 +146,9 @@ class SSH:
         return head_path_info, processed_cmd
 
     def exec_run(self, cmd: str) -> CmdRecord:
-        """exec_run，执行命令，返回输出信息记录类CmdRecord
+        """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n
+        与exec_run的区别在于，exec_run_bata会记录每一行命令的执行时间，而exec_run不会\n
+        实现方式也由recv改为readline
         ```python
         remote_config = RemoteConfig(
             user="user",
@@ -137,23 +171,19 @@ class SSH:
             cmd,
             f"[{self.name}]{head_path_info} $",
         )
-        print(record.get_fmt_prompt())
-        _stdin, stdout, _stderr = self.remote.exec_command(processed_cmd, get_pty=True)
-        out_str = ""
+        self.cmds.append(record)
+        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+        record.stdin, stdout, _stderr = self.remote.exec_command(
+            processed_cmd, get_pty=True
+        )
         while not stdout.channel.exit_status_ready():
-            if stdout.channel.recv_ready():
-                tmp_out = stdout.channel.recv(1024).decode()
-                out_str += tmp_out
-                print(tmp_out, end="")
+            if (tmp_out := stdout.readline().strip()) != "":
+                record.result.append(Term.putsln(tmp_out))
             time.sleep(0.01)
         else:
-            if stdout.channel.recv_ready():
-                tmp_out = stdout.channel.recv(1024).decode()
-                out_str += tmp_out
-                print(tmp_out, end="")
+            if (tmp_out := stdout.readline().strip()) != "":
+                record.result.append(Term.putsln(tmp_out))
         record.record_end()
-        record.record_result(out_str)
-        self.cmds.append(record)
         return record
 
     def _long_running_task(self, cmd: str, record: CmdRecording):
@@ -162,14 +192,19 @@ class SSH:
         while not record.stop_event.is_set():
             line = stdout.readline()
             if line != "":
-                print(f"[{record.id}]:", line, end="")
-                record.result.append(line)
+                line = line.strip()
+                record.result.append(
+                    Term.putsln(
+                        line,
+                        insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                    )
+                )
                 record.fifo.put(line)
             time.sleep(0.005)
         else:
             record.record_end()
-            # dbg
-            print("task end")
+            # DBG
+            Term.putsln(f"[{record.id}] task end")
 
     def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording:
         head_path_info, processed_cmd = self._path_process(cmd)
@@ -180,11 +215,11 @@ class SSH:
         )
 
         self.cmds.append(record)
-        print(record.get_fmt_prompt())
         task = td.Thread(target=self._long_running_task, args=(processed_cmd, record))
         task.daemon = True
         record.long_running_task = task
-        record.start_time = time.time()  # record start time
+        # record.start_time = time.time()  # record start time
+        Term.putsln(record.get_fmt_prompt())
         task.start()
         time.sleep(wait_time)
         # task.join()
@@ -196,7 +231,6 @@ class Channel:
     """通道类，用于管理SSH通道"""
 
     class_id = 0  # 用于给没有指定名称的通道生成id
-    # prompt_pattern_default = r"(?:[\w@\-\.\[\]]+[:~/\w\-\. ]*)?[\$#]\s*$"  # 终端提示符捕获的正则表达式，如果不能适用请在创建Channel时指定
     prompt_pattern_default = r"(?:[\w@\-\.\[\]]+[:~/\w\-\. ]*|[:~/\w\-\. ]+)?[\$#]\s*$"
 
     @classmethod
@@ -214,6 +248,7 @@ class Channel:
     ):
         """初始化通道，需要指定SSH"""
         self.shell = ssh.remote.invoke_shell()
+        self.start_time = Timestamp()
         self.name = name if name else "ch_" + str(Channel.id_generator())
         self.prompt_complie = re.compile(prompt_pattern)
         self.cmds: list[CmdRecord] = []
@@ -251,10 +286,11 @@ class Channel:
         )  # 对于多行命令的处理
         f_cmd_lines_skip = False  # 是否处理完发送的命令
         f_prompt_received = False  # 是否匹配终端提示符
-        res = ""  # 有效输出
+        # res = ""  # 有效输出
 
         record = CmdRecord(cmd, f"[{self.name}]{self.prompt_now}")
-        print(record.get_fmt_prompt())
+        self.cmds.append(record)
+        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
         self.shell.send(
             bytes(cmd + "\r\n", "utf-8")
         )  # 发送的字符同样会进入接收当中，需要去重
@@ -264,15 +300,10 @@ class Channel:
                 rcv = self.shell.recv(65535)  # 接收
 
                 buf += rcv  # 存入buf
-                # print(
-                #     f"DBG : BUF IN RUN : {buf.decode().replace('\r\n', '[rn]').replace('\r', '[r]')}"
-                # )
                 while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
                     buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
                     line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
                     line = line_b.decode().strip().replace("\r", "")
-                    # dbg
-                    # print(f"DBG: LINE: {line}")
 
                     if (
                         len(cmd_lines) == 0 and not f_cmd_lines_skip
@@ -281,13 +312,11 @@ class Channel:
 
                     if (
                         not f_cmd_lines_skip  # 命令处理完成标志未置位
-                        and cmd_lines[0] == remove_ansi(line)  # 命令行与当前行相等
+                        and cmd_lines[0] in remove_ansi(line)  # 命令行与当前行相等
                         and len(cmd_lines) > 0  # 命令行未处理完毕
                     ):
-                        # print(f"DBG: pop cmd_lines = {cmd_lines}")
                         cmd_lines.pop(0)  # 弹出处理完的命令
                         continue
-                    # print(f"DBG: rm ansi line = {remove_ansi(line)}")
                     if self.prompt_complie.search(
                         remove_ansi(line)
                     ):  # 当前行与命令行提示符匹配
@@ -296,19 +325,12 @@ class Channel:
                         )  # 更新命令行提示符
                         f_prompt_received = True  # 命令行提示符处理完成标志置位
                         break
-                    # else:
-                    # print("NOT MATCH BREAK")
-                    print(line)  # 处理时实时输出
-                    res += line + "\r\n"  # 累积输出
-                # else:
-                #     print("???????")
+                    record.result.append(Term.putsln(line))
                 if f_prompt_received:
                     break
 
-            time.sleep(0.01)
+            time.sleep(0.005)
         record.record_end()
-        record.record_result(res)
-        self.cmds.append(record)
         return record
 
     @overload

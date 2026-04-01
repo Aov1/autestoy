@@ -1,29 +1,16 @@
-import sys
-import time
+class T:
+    def __init__(self) -> None:
+        pass
+
+    def __getitem__(self, key):
+        print(f"{key = }")
+        print(f"{type(key) = }")
 
 
-def test_print(n):
-    for i in range(n):
-        print(f"{i:X>50}")
+t = T()
+t["":"":""]
 
-
-def test_write(n):
-    for i in range(n):
-        sys.stdout.write(f"{i:X>50}\n")
-
-
-n = 1000000
-
-start = time.time()
-test_print(n)
-res = time.time() - start
-
-start = time.time()
-test_write(n)
-res2 = time.time() - start
-
-print(f"print: {res:.6f} seconds")
-print(f"write: {res2:.6f} seconds")
-
-print("FLOW EDITOR")
- 
+s = slice(30, 10, 2)
+length = 32
+start, stop, step = s.indices(length)
+print(start, stop, step)

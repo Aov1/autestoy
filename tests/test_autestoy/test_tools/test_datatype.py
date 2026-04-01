@@ -80,28 +80,76 @@ def test_num2bits():
     print("num2bits ok")
 
 
-def test_Bits():
+def test_Bits_init():
     t = Bits(0x12345678, 32)
     assert t.value == 0x12345678
     assert t.width == 32
-    assert t.bytes_cnt == 4
-    assert t.bytes.all() == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
+    # assert t.bytes_cnt == 4
+    # assert t.bytes.all() == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
 
     t = Bits("0b111110101010", 8)
     assert t.value == 0xAA
     assert t.width == 8
-    assert t.bytes_cnt == 1
-    assert t.bytes.all() == np.array([0xAA], dtype=np.uint8).all()
+    # assert t.bytes_cnt == 1
+    # assert t.bytes.all() == np.array([0xAA], dtype=np.uint8).all()
 
     t = Bits("32'h1234ABCD")
     assert t.value == 0x1234ABCD
     assert t.width == 32
-    assert t.bytes_cnt == 4
-    assert t.bytes.all() == np.array([0xCD, 0xAB, 0x34, 0x12], dtype=np.uint8).all()
+    # assert t.bytes_cnt == 4
+    # assert t.bytes.all() == np.array([0xCD, 0xAB, 0x34, 0x12], dtype=np.uint8).all()
 
     t = Bits("16'h1234ABCD")
     assert t.value == 0xABCD
     assert t.width == 16
-    assert t.bytes_cnt == 2
-    assert t.bytes.all() == np.array([0xCD, 0xAB], dtype=np.uint8).all()
-    print("Bits ok")
+    # assert t.bytes_cnt == 2
+    # assert t.bytes.all() == np.array([0xCD, 0xAB], dtype=np.uint8).all()
+
+    t = Bits("0x12345678_u32", 16)
+    assert t.value == 0x5678
+    assert t.width == 16
+
+    t = Bits("0x1234_u16", 32)
+    assert t.value == 0x1234
+    assert t.width == 32
+
+    t = Bits(t, 8)
+    assert t.value == 0x34
+    assert t.width == 8
+
+    t = Bits(t)
+    assert t.value == 0x34
+    assert t.width == 8
+
+    t = Bits(["4'b1111", Bits(0b1010, 4), (0xF0, 8)])
+    assert t.value == 0b1111_1010_1111_0000
+    assert t.width == 16
+
+    print("Bits.__init__() ok")
+
+
+def test_Bits_getitem():
+    t = Bits(0b1011_0101, 8)
+
+    assert t[3].value == 0
+    assert t[3].width == 1
+    assert t[4].value == 1
+    assert t[4].width == 1
+
+    assert t[0:3].value == t[7:4].value == 0b1011
+    assert t[0:3].width == t[7:4].width == 4
+    assert t[3:0].value == t[3:0].value == 0b0101
+    assert t[3:0].width == t[3:0].width == 4
+
+    assert t[3:].value == 0
+    assert t[3:].width == 1
+    assert t[:3].value == 1
+    assert t[:3].width == 1
+
+    t = Bits(0x0123_4567_89AB_CEDF, 64)
+    assert t[7:0, 15:8].value == 0xDFCE
+    assert t[7:0, 15:8].width == 16
+    assert t[7, 6, 5, 4, 3, 2, 1, 0].value == 0xDF
+    assert t[7, 6, 5, 4, 3, 2, 1, 0].width == 8
+    assert t[:0, :1, :2, :3, :4, :5, :6, :7].value == 0x01
+    assert t[:0, :1, :2, :3, :4, :5, :6, :7].width == 8

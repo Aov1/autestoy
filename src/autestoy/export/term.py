@@ -42,7 +42,7 @@ class Term:
         cls.time_base = time_base
 
     @classmethod
-    def puts(cls, msg: str) -> tuple[Timestamp, Result]:
+    def puts(cls, msg: str) -> tuple[Timestamp, Result[str]]:
         """终端输出msg，返回时间戳和msg本身，用作流式处理"""
         log_time = Timestamp()
         sys_write(
@@ -56,7 +56,7 @@ class Term:
         msg: str,
         log_time: Timestamp | None = None,
         insert_str_before_msg: str | None = None,
-    ) -> tuple[Timestamp, Result]:
+    ) -> tuple[Timestamp, Result[str]]:
         """终端输出带换行，返回时间戳和字符作为流式处理\n
         是否输出时间戳受到Term类属性控制\n
         输出样式受到TermStyle类属性控制，使用ANSI转义"""

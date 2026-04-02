@@ -42,13 +42,6 @@ src
 
 ## 依赖关系
 
-#todo 
-
-```mermaid_
-
-```
-
-
 # 未来规划
 
 - 尽快完善基础功能，至少完成一条完整的测试-显示-导出报告的流程
@@ -205,10 +198,11 @@ reg[ :0 , 1:2 , :3 ] == reg[0:3] == Bits( 0x1 , 4 )
 # ToDoList
 
 - [ ] 为ssh-Channel.run/SSH.exec_run实现短交互命令，例如sudo登陆
-- [ ] ssh-SSH/Channel类初始化添加时间戳记录，考虑新的Record类:MataRecord?
+- [x] ssh-SSH/Channel类初始化添加时间戳记录，考虑新的Record类:MataRecord?
 
 - [ ] 统一测试文件，运行时使用ftp传输运行脚本到远程被测试端，测试完成后删除
 	- [ ] ftp服务
+  	- [ ] 继承并添加Record
 	- [ ] 文件hash校验
 
 - [x] 记录每一行命令输出的时间戳

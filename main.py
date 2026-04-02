@@ -1,16 +1,14 @@
-class T:
-    def __init__(self) -> None:
-        pass
+import autestoy as at
 
-    def __getitem__(self, key):
-        print(f"{key = }")
-        print(f"{type(key) = }")
-
-
-t = T()
-t["":"":""]
-
-s = slice(30, 10, 2)
-length = 32
-start, stop, step = s.indices(length)
-print(start, stop, step)
+conf = at.RemoteConfig(
+    user="aoiiix",
+    ip="127.0.0.1",
+    password="0402",
+    port=22,
+).set_name("local")
+conn = at.SSH(conf)
+conn.exec_run('echo "Hello World"')
+ch = conn.create_channel(insert_cmd=None)
+# print(ch.prompt_now)
+ch.run("ls")
+ch.run("pwd")

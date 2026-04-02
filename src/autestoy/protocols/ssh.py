@@ -6,14 +6,15 @@ import re
 import threading as td
 import time
 import warnings
-from typing import Self, Union, overload
+from typing import IO, Callable, Iterator, Self, TypeAlias, Union, overload, override
 
+# from typing import StrOrBytesPath, _Callback
 import paramiko as pk
 
 from ..export.collect import Channel_record, SSH_record, collect
 from ..export.term import Term
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
-from ..tools.result import CmdRecord, CmdRecording
+from ..tools.result import CmdRecord, CmdRecording, MetaRecord, Result
 
 # import asyncssh as assh
 from ..tools.timestamp import Timestamp
@@ -42,27 +43,61 @@ class SSH:
     def __init__(
         self, remote_config: RemoteConfig, timeout: float | None = None
     ) -> None:
+        # class create reocrd
         self.remote_config: RemoteConfig = remote_config
         self.name = self.remote_config.name
+        self.meta_record = MetaRecord(
+            type="SSH",
+            name=self.name,
+            info=f"{self.remote_config.user}@{self.remote_config.ip}",
+        )
+        # Term.putsln(
+        #     f"[{self.meta_record.type}][{self.meta_record.name}][{self.meta_record.info}] Created"
+        # )
+        # config
         self.remote = pk.SSHClient()
         self.remote.set_missing_host_key_policy(pk.AutoAddPolicy())
         self.timeout: None | float = timeout
-        self.channels: list[Channel] = []
-        self.cmds: list[CmdRecord] = []
+        # sub record
+        self.channels: list[Channel] = []  # 记录子通道
+        self.cmds: list[CmdRecord] = []  # 记录运行的命令
+        # path config
         self.global_path: str | None = None
         self.temp_path: str | None = None
         self.base_path: str | None = None
-        self.start_time: float | None = None
+        # try connect
         try:
             self._connect()
         except Exception as e:
             warnings.warn(f"Failed to connect to {self.remote_config.name}: {e}")
-
+        # check connect
         if self.is_connected():
+            self.meta_record.logs.append(
+                Term.putsln(f"{self.meta_record.get_fmt_prompt()} Connected")
+            )
+            self.start_time = self.meta_record.start_time
             _, stdout, _ = self.remote.exec_command("pwd")
             self.base_path = stdout.read().decode().strip()
-            print(self.base_path)
+            # print(self.base_path)
             self.connect_time = time.time()
+
+    def __del__(self):
+        if self.is_connected():
+            self.meta_record.logs.append(
+                Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
+            )
+            self.remote.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.is_connected():
+            self.meta_record.logs.append(
+                Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
+            )
+            self.remote.close()
+        return False
 
     def is_connected(self) -> bool:
         """判断是否已连接到远程主机"""
@@ -227,6 +262,9 @@ class SSH:
         # task.join()
         return record
 
+    def create_ftp(self) -> SFTP:
+        return SFTP(self)
+
 
 @collect(Channel_record)
 class Channel:
@@ -250,11 +288,15 @@ class Channel:
         insert_cmd: str | None = None,
     ):
         """初始化通道，需要指定SSH"""
-        self.shell = ssh.remote.invoke_shell()
-        self.start_time = Timestamp()
+        # create record
         self.name = name if name else "ch_" + str(Channel.id_generator())
+        self.meta_record = MetaRecord(
+            type="Channel", name=self.name, info=ssh.meta_record.info
+        )
+        self.shell = ssh.remote.invoke_shell()
         self.prompt_complie = re.compile(prompt_pattern)
         self.cmds: list[CmdRecord] = []
+
         # 处理初始化通道时产生的默认输出，并获终端取提示符
         string = ""
         self.shell.send(bytes(insert_cmd + "\n", "utf-8")) if isinstance(
@@ -288,10 +330,14 @@ class Channel:
         self.f_get_prompt = True if self.prompt_complie.search(prompt) else False
         self.prompt_now = prompt
         # print(f"DBG:prompt_now = {prompt}")
+        self.meta_record.logs.append(
+            Term.putsln(f"{self.meta_record.get_fmt_prompt()} Created")
+        )
 
     def set_name(self, name: str):
         """设置通道名称"""
         self.name = name
+        self.meta_record.name = name
 
     def run(self, cmd: str) -> CmdRecord:
         """执行命令，使用正则匹配终端提示符判断是否结束"""
@@ -377,3 +423,373 @@ class Channel:
                 return self.run_lines(cmd_list)
             else:  # 命令只有一行，统一列表返回格式
                 return [self.run(cmds)]
+
+
+from os import PathLike
+
+StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]  # stable
+_Callback: TypeAlias = Callable[[int, int], object]
+from paramiko.sftp_attr import SFTPAttributes
+from paramiko.sftp_file import SFTPFile
+
+
+class SFTP(pk.SFTPClient):
+    """继承自paramiko的SFTPClient，实现时间戳记录，用法与基类一致\n
+    加入一些方法"""
+
+    def __init__(self, ssh: SSH):
+        self.meta_record = MetaRecord(
+            type="SFTP",
+            name=ssh.name,
+            info=ssh.meta_record.info,
+        )
+        self.aty_ssh = ssh
+        self.tmp_channel = ssh.remote.open_sftp().get_channel()
+        self.prompt = f"[{self.meta_record.name}][{self.meta_record.type}] >>>"
+        self.cmds: list[CmdRecord] = []
+        self.is_sftp_opened = False
+        # self.aty_channel = Channel(ssh)
+        if self.tmp_channel:
+            super().__init__(self.tmp_channel)
+            self.is_sftp_opened = True
+            self.meta_record.logs.append(
+                Term.putsln(self.meta_record.get_fmt_prompt() + " Opened")
+            )
+        else:
+            info = f"{AnsiColor.red}{self.meta_record.get_fmt_prompt(False) + ' Open Failed'}{AnsiReset}"
+            self.meta_record.logs.append(Term.putsln(info))
+
+    def create_channel(self, *args, **kwargs) -> Channel:
+        """创建一个新的Channel对象，用于执行命令\n
+        name: 通道名称，用于标识"""
+        return Channel(self.aty_ssh, *args, **kwargs)
+
+    @override
+    def listdir(self, path: str = ".") -> list[str]:
+        record = CmdRecord(
+            cmd=f"listdir {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().listdir(path)
+        for dir in res:
+            record.result.append(Term.putsln(dir))
+        record.record_end()
+        return res
+
+    @override
+    def listdir_attr(self, path: str = ".") -> list[SFTPAttributes]:
+        record = CmdRecord(
+            cmd=f"listdir_attr {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().listdir_attr(path)
+        for attr in res:
+            t, _ = Term.putsln(str(attr))
+            record.result.append((t, Result(attr)))
+        record.record_end()
+        return res
+
+    @override
+    def listdir_iter(
+        self, path: bytes | str = ".", read_aheads: int = 50
+    ) -> Iterator[SFTPAttributes]:
+        record = CmdRecord(
+            cmd=f"listdir_iter {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+
+        res = super().listdir_iter(path, read_aheads)
+        record.result_append(res)
+        record.record_end()
+        return res
+
+    @override
+    def open(
+        self, filename: bytes | str, mode: str = "r", bufsize: int = -1
+    ) -> SFTPFile:
+        record = CmdRecord(
+            cmd=f"open {filename} {mode} {bufsize}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().open(filename, mode, bufsize)
+        record.result_append(res)
+        record.record_end()
+        return res
+
+    @override
+    def remove(self, path: bytes | str) -> None:
+        record = CmdRecord(
+            cmd=f"remove {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().remove(path)
+        record.record_end()
+
+    @override
+    def rename(self, oldpath: bytes | str, newpath: bytes | str) -> None:
+        record = CmdRecord(
+            cmd=f"rename {oldpath} {newpath}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().rename(oldpath, newpath)
+        record.record_end()
+
+    @override
+    def posix_rename(self, oldpath: bytes | str, newpath: bytes | str) -> None:
+        record = CmdRecord(
+            cmd=f"posix_rename {oldpath} {newpath}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().posix_rename(oldpath, newpath)
+        record.record_end()
+
+    @override
+    def mkdir(self, path: bytes | str, mode: int = 0o777) -> None:
+        record = CmdRecord(
+            cmd=f"mkdir {path} {mode}",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        super().mkdir(path, mode)
+        record.record_end()
+
+    @override
+    def rmdir(self, path: bytes | str) -> None:
+        record = CmdRecord(
+            cmd=f"rmdir {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().rmdir(path)
+        record.record_end()
+
+    @override
+    def stat(self, path: bytes | str) -> SFTPAttributes:
+        record = CmdRecord(
+            cmd=f"stat {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().stat(path)
+        record.result_append(res)
+        record.record_end()
+        return res
+
+    @override
+    def lstat(self, path: bytes | str) -> SFTPAttributes:
+        record = CmdRecord(
+            cmd=f"lstat {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().lstat(path)
+        record.result_append(res)
+        record.record_end()
+        return res
+
+    @override
+    def symlink(self, source: bytes | str, dest: bytes | str) -> None:
+        record = CmdRecord(
+            cmd=f"symlink {source} {dest}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().symlink(source, dest)
+        record.record_end()
+
+    @override
+    def chmod(self, path: bytes | str, mode: int) -> None:
+        record = CmdRecord(
+            cmd=f"chmod {path} {mode}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().chmod(path, mode)
+        record.record_end()
+
+    @override
+    def chown(self, path: bytes | str, uid: int, gid: int) -> None:
+        record = CmdRecord(
+            cmd=f"chown {path} {uid} {gid}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().chown(path, uid, gid)
+        record.record_end()
+
+    @override
+    def utime(self, path: bytes | str, times: tuple[float, float] | None) -> None:
+        record = CmdRecord(
+            cmd=f"utime {path} {times}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().utime(path, times)
+        record.record_end()
+
+    @override
+    def truncate(self, path: bytes | str, size: int) -> None:
+        record = CmdRecord(
+            cmd=f"truncate {path} {size}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        super().truncate(path, size)
+        record.record_end()
+
+    @override
+    def readlink(self, path: bytes | str) -> str | None:
+        record = CmdRecord(
+            cmd=f"readlink {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().readlink(path)
+        record.result_append(res) if res is not None else None
+        record.record_end()
+        return res
+
+    @override
+    def normalize(self, path: bytes | str) -> str:
+        record = CmdRecord(
+            cmd=f"normalize {path}",
+            prompt=self.prompt,
+        )
+        self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = super().normalize(path)
+        record.result_append(res)
+        record.record_end()
+        return res
+
+    @override
+    def chdir(self, path: None | bytes | str = None) -> None:
+        record = CmdRecord(
+            cmd=f"chdir {path}",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        super().chdir(path)
+        record.record_end()
+
+    @override
+    def getcwd(self) -> str | None:
+        record = CmdRecord(
+            cmd="getcwd",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        res = super().getcwd()
+        record.result_append(res) if res is not None else None
+        record.record_end()
+        return res
+
+    @override
+    def putfo(
+        self,
+        fl: IO[bytes],
+        remotepath: bytes | str,
+        file_size: int = 0,
+        callback: _Callback | None = None,
+        confirm: bool = True,
+    ) -> SFTPAttributes:
+        record = CmdRecord(
+            cmd=f"putfo {remotepath}",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        res = super().putfo(fl, remotepath, file_size, callback, confirm)
+        record.result_append(res) if res is not None else None
+        record.record_end()
+        return res
+
+    @override
+    def put(
+        self,
+        localpath: StrOrBytesPath,
+        remotepath: bytes | str,
+        callback: _Callback | None = None,
+        confirm: bool = True,
+    ) -> SFTPAttributes:
+        record = CmdRecord(
+            cmd=f"put {localpath} {remotepath}",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        res = super().put(localpath, remotepath, callback, confirm)
+        record.record_end()
+        record.result.append(Term.putsln(str(res)))
+        return res
+
+    @override
+    def getfo(
+        self,
+        remotepath: bytes | str,
+        fl: IO[bytes],
+        callback: _Callback | None = None,
+        prefetch: bool = True,
+        max_concurrent_prefetch_requests: int | None = None,
+    ) -> int:
+        record = CmdRecord(
+            cmd=f"getfo {remotepath}",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        res = super().getfo(
+            remotepath, fl, callback, prefetch, max_concurrent_prefetch_requests
+        )
+        record.record_end()
+        record.result.append(Term.putsln(str(res)))
+        return res
+
+    @override
+    def get(
+        self,
+        remotepath: bytes | str,
+        localpath: StrOrBytesPath,
+        callback: _Callback | None = None,
+        prefetch: bool = True,
+        max_concurrent_prefetch_requests: int | None = None,
+    ) -> None:
+        record = CmdRecord(
+            cmd=f"get {remotepath} {localpath}",
+            prompt=self.prompt,
+        )
+        Term.putsln(record.get_fmt_prompt())
+        self.cmds.append(record)
+        super().get(
+            remotepath, localpath, callback, prefetch, max_concurrent_prefetch_requests
+        )
+        record.record_end()
+
+    def auto_mkdir(self, path: str) -> None:
+        """自动创建目录，如果目录已存在则不做任何操作"""

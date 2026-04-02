@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import queue
 import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import override
+from typing import Generic, TypeVar, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
@@ -31,7 +33,7 @@ class CmdRecord:
         self.end_time: Timestamp | None = None
         self.run_time: float | None = None
         self.cmd: str = cmd
-        self.result: list[tuple[Timestamp, str]] = []
+        self.result: list[tuple[Timestamp, Result]] = []
         self.stdin: pk_ChannelStdinFile | None = None
 
     def task_kill(self):
@@ -54,8 +56,13 @@ class CmdRecord:
     # def record_result(self, result: str) -> None:
     #     """记录命令的输出结果，包括ansi"""
     #     self.result = result.replace("\r\n", "\n").strip().split("\n")
+    def result_append(self, result: T, timestamp: Timestamp | None = None) -> None:
+        """添加在result末尾"""
+        if timestamp is None:
+            timestamp = Timestamp()
+        self.result.append((timestamp, Result(result)))
 
-    def record_result_bata(self, result: list[tuple[Timestamp, str]]) -> None:
+    def record_result(self, result: list[tuple[Timestamp, Result]]) -> None:
         """记录命令的输出结果，包括ansi"""
         self.result = result
 
@@ -91,6 +98,35 @@ class CmdRecording(CmdRecord):
         self.stop_event.set()
 
 
-class Result:
-    def __init__(self) -> None:
-        pass
+class MetaRecord:
+    def __init__(self, type: str, name: str, info: str) -> None:
+        # timestamp
+        self.start_time = Timestamp()
+        self.end_time: None | Timestamp = None
+        # info
+        self.type: str = type
+        self.info: str = info
+        self.name: str = name
+        # record
+        self.logs: list[tuple[Timestamp, Result]] = []
+
+    def get_fmt_prompt(self, colorful: bool = True) -> str:
+        fmt_string = f"{TermStyle.log_font_color}{TermStyle.log_background_color}[{self.type}][{self.name}][{self.info}]{AnsiReset}"
+        if colorful:
+            return fmt_string
+        return remove_ansi(fmt_string)
+
+
+T = TypeVar("T")
+
+
+class Result(Generic[T]):
+    def __init__(self, value: T) -> None:
+        self.value: T = value
+
+    def get(self) -> T:
+        return self.value
+
+    def type(self) -> type[T]:
+        return type(self.value)
+        # return self.value.__args__

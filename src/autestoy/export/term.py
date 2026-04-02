@@ -3,9 +3,9 @@
 """
 
 import sys
-import time
 
-from ..tools.ansi import AnsiColor, AnsiReset
+from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
+from ..tools.result import Result
 from ..tools.timestamp import Timestamp
 
 sys_write = sys.stdout.write
@@ -23,6 +23,15 @@ class TermStyle:
     prompt_font_color = AnsiColor.light_green
     prompt_background_color = AnsiColor.none
 
+    log_font_color = AnsiColor.light_blue
+    log_background_color = AnsiColor.none
+
+    warning_font_color = AnsiColor.yellow
+    warning_background_color = AnsiColor.none
+
+    error_font_color = AnsiColor.red
+    error_background_color = AnsiColor.none
+
 
 class Term:
     sw_timestamp: bool = True
@@ -33,13 +42,13 @@ class Term:
         cls.time_base = time_base
 
     @classmethod
-    def puts(cls, msg: str) -> tuple[Timestamp, str]:
+    def puts(cls, msg: str) -> tuple[Timestamp, Result]:
         """终端输出msg，返回时间戳和msg本身，用作流式处理"""
         log_time = Timestamp()
         sys_write(
             f"{TermStyle.msg_background_color}{TermStyle.msg_font_color}{msg}{AnsiReset}"
         )
-        return log_time, msg
+        return log_time, Result(remove_ansi(msg))
 
     @classmethod
     def putsln(
@@ -47,7 +56,7 @@ class Term:
         msg: str,
         log_time: Timestamp | None = None,
         insert_str_before_msg: str | None = None,
-    ) -> tuple[Timestamp, str]:
+    ) -> tuple[Timestamp, Result]:
         """终端输出带换行，返回时间戳和字符作为流式处理\n
         是否输出时间戳受到Term类属性控制\n
         输出样式受到TermStyle类属性控制，使用ANSI转义"""
@@ -66,4 +75,4 @@ class Term:
         sys_write(
             f"{TermStyle.msg_background_color}{TermStyle.msg_font_color}{msg}{AnsiReset}\n"
         )
-        return log_time, msg
+        return log_time, Result(remove_ansi(msg))

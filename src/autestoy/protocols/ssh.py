@@ -80,9 +80,11 @@ class SSH:
             timeout=self.timeout,
         )
 
-    def create_channel(self, name: str | None = None) -> Channel:
+    def create_channel(
+        self, name: str | None = None, insert_cmd: str | None = None
+    ) -> Channel:
         """创建ssh通道，用作交互式终端"""
-        tmp = Channel(self, name)
+        tmp = Channel(self, name=name, insert_cmd=insert_cmd)
         self.channels.append(tmp)
         return tmp
 
@@ -245,6 +247,7 @@ class Channel:
         name: str | None = None,
         prompt_pattern: str = prompt_pattern_default,
         show_welcome_info: bool = False,
+        insert_cmd: str | None = None,
     ):
         """初始化通道，需要指定SSH"""
         self.shell = ssh.remote.invoke_shell()
@@ -254,22 +257,37 @@ class Channel:
         self.cmds: list[CmdRecord] = []
         # 处理初始化通道时产生的默认输出，并获终端取提示符
         string = ""
+        self.shell.send(bytes(insert_cmd + "\n", "utf-8")) if isinstance(
+            insert_cmd, str
+        ) else None
+        tmp_timestamp = time.time()
+        tmp_timeout = 3
+        tmp_f_switched_bash = False
         while True:
             if self.shell.recv_ready():
                 welcome_info = self.shell.recv(65535).decode()
                 string += welcome_info
 
                 if show_welcome_info:
-                    print(welcome_info)
+                    Term.puts(welcome_info)
+                    # print(welcome_info)
 
                 if tmp := self.prompt_complie.search(remove_ansi(string)):
                     break
             time.sleep(0.01)
+            if time.time() - tmp_timestamp > tmp_timeout and not tmp_f_switched_bash:
+                self.shell.send(bytes("bash\n", "utf-8"))
+                Term.puts(
+                    f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                )
+                tmp_f_switched_bash = True
+                # print()
+
         prompt = tmp.group().replace("\r", "")
 
         self.f_get_prompt = True if self.prompt_complie.search(prompt) else False
         self.prompt_now = prompt
-        print(f"DBG:prompt_now = {prompt}")
+        # print(f"DBG:prompt_now = {prompt}")
 
     def set_name(self, name: str):
         """设置通道名称"""

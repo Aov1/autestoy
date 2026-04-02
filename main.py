@@ -1,12 +1,6 @@
-from pprint import pprint
+# from pprint import pprint
 
 import autestoy as at
-from autestoy.tools.result import Result
-
-res = Result(123)
-print(res.get())
-print(res.type())
-exit()
 
 conf = at.RemoteConfig(
     user="u0_a210",
@@ -22,15 +16,21 @@ with at.SSH(conf) as conn:
     ch.run("ls")
     ch.run("pwd")
 
+    ch.run("cd project/autestoy_sim/")
     with conn.create_ftp() as ftp:
         ftp.chdir("project/autestoy_sim/")
-        if "ftp_test" not in ftp.listdir():
-            ftp.mkdir("ftp_test/")
-        else:
-            at.Term.putsln("ftp_test already exists")
+        if "ftp_test" in map(lambda x: x[1].get(), ftp.listdir().result):
+            try:
+                ftp.getcwd()
+                ftp.remove("ftp_test")
+            except Exception as e:
+                print(e)
+                ch.run("rm -rf ./ftp_test")
+        ftp.mkdir("ftp_test")
         res = ftp.put("./main.py", "ftp_test/main.py")
-        ftp.listdir_attr()
+        res = ftp.listdir_attr()
+
         # ftp.aty_channel.run("pwd")
 
-    ch.run("cd project/autestoy_sim/ftp_test/")
+    ch.run("cd ftp_test/")
     ch.run("ls")

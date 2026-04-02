@@ -202,7 +202,7 @@ reg[ :0 , 1:2 , :3 ] == reg[0:3] == Bits( 0x1 , 4 )
 
 - [ ] 统一测试文件，运行时使用ftp传输运行脚本到远程被测试端，测试完成后删除
 	- [ ] ftp服务
-  	- [ ] 继承并添加Record
+  	- [x] 继承并添加Record
 	- [ ] 文件hash校验
 
 - [x] 记录每一行命令输出的时间戳
@@ -227,4 +227,5 @@ reg[ :0 , 1:2 , :3 ] == reg[0:3] == Bits( 0x1 , 4 )
 
 # 已知问题
 
-- 无
+- SFTP.remove(path) always Fail at Huawei Matepad
+-

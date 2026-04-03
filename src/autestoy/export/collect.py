@@ -1,15 +1,9 @@
 """实现脚本输出收集，通过装饰器等"""
 
 from functools import wraps
-from typing import Any
-
-SSH_record: dict[str, Any] = dict()  # 记录所有创建的SSH类
-Channel_record: dict[str, Any] = dict()  # 记录所有创建的Channel
-
-# Meta_record: dict[float, Any] = {}  #
 
 
-def collect(storage_dict):
+def collect(storage_dict: dict):
     """
     类装饰器：将每个实例添加到 storage_dict 中。要求类的实例拥有name属性作为字典的键
     """

@@ -7,14 +7,14 @@ import threading as td
 import time
 import warnings
 from os import PathLike
-from typing import IO, Callable, Iterator, Self, TypeAlias, Union, overload
+from typing import IO, Any, Callable, Iterator, Self, TypeAlias, Union, overload
 
 # from typing import StrOrBytesPath, _Callback
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes
 from paramiko.sftp_file import SFTPFile
 
-from ..export.collect import Channel_record, SSH_record, collect
+from ..export.collect import collect
 from ..export.term import Term
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.record import CmdRecord, CmdRecording, MetaRecord
@@ -27,6 +27,12 @@ StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]  # sta
 _Callback: TypeAlias = Callable[[int, int], object]
 
 
+SSH_collect: dict[str, Any] = {}  # 记录所有创建的SSH类
+Channel_collect: dict[str, Any] = {}  # 记录所有创建的Channel类
+SFTP_collect: dict[str, Any] = {}  # 记录所有创建的STFP类
+
+
+# Meta_record: dict[float, Any] = {}  #
 class RemoteConfig:
     """远程配置类，用于配置远程主机的连接信息"""
 
@@ -43,7 +49,7 @@ class RemoteConfig:
         return self
 
 
-@collect(SSH_record)
+@collect(SSH_collect)
 class SSH:
     """SSH协议类，用于连接远程主机"""
 
@@ -68,6 +74,7 @@ class SSH:
         # sub record
         self.channels: list[Channel] = []  # 记录子通道
         self.cmds: list[CmdRecord] = []  # 记录运行的命令
+        self.sftp: list[SFTP] = []  # 记录开启的SFTP服务
         # path config
         self.global_path: str | None = None
         self.temp_path: str | None = None
@@ -90,20 +97,32 @@ class SSH:
 
     def __del__(self):
         if self.is_connected():
+            for ch in self.channels:
+                if not ch.shell.closed:
+                    ch.shell.close()
+                    ch.meta_record.logs.append(
+                        Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
+                    )
+            self.remote.close()
             self.meta_record.logs.append(
                 Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
             )
-            self.remote.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.is_connected():
+            for ch in self.channels:
+                if not ch.shell.closed:
+                    ch.shell.close()
+                    ch.meta_record.logs.append(
+                        Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
+                    )
+            self.remote.close()
             self.meta_record.logs.append(
                 Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
             )
-            self.remote.close()
         return False
 
     def is_connected(self) -> bool:
@@ -270,10 +289,12 @@ class SSH:
         return record
 
     def create_ftp(self) -> SFTP:
-        return SFTP(self)
+        sftp = SFTP(self)
+        self.sftp.append(sftp)
+        return sftp
 
 
-@collect(Channel_record)
+@collect(Channel_collect)
 class Channel:
     """通道类，用于管理SSH通道"""
 
@@ -432,6 +453,7 @@ class Channel:
                 return [self.run(cmds)]
 
 
+@collect(SFTP_collect)
 class SFTP:
     """继承自paramiko的SFTPClient，实现时间戳记录，用法与SFTPClient基本一致\n
     套壳实现了大部分同名方法，修改了部分有返回值的方法，以保持风格一致"""
@@ -442,7 +464,8 @@ class SFTP:
             name=ssh.name,
             info=ssh.meta_record.info,
         )
-        self.aty_ssh = ssh
+        self.name = ssh.name
+        self.ssh = ssh
         # self.tmp_channel = ssh.remote.open_sftp().get_channel()
         self.prompt = f"[{self.meta_record.name}][{self.meta_record.type}] >>>"
         self.cmds: list[CmdRecord] = []

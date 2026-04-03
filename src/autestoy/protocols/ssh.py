@@ -179,8 +179,8 @@ class SSH:
             f"[{self.name}]{head_path_info} $",
         )
         self.cmds.append(record)
-        record.start_time = Timestamp()
-        print(record.get_fmt_prompt())
+        # record.start_time = Timestamp()
+        Term.putsln(record.get_fmt_prompt())
         record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
 
         while True:

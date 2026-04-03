@@ -40,6 +40,7 @@ class CmdRecord(Generic[T]):
         self.stdin: pk_ChannelStdinFile | None = None
 
     def task_kill(self):
+        """非线程任务，只发送ctrl-c"""
         if self.stdin is not None:
             self.stdin.write("\x03")
 
@@ -60,7 +61,7 @@ class CmdRecord(Generic[T]):
     #     """记录命令的输出结果，包括ansi"""
     #     self.result = result.replace("\r\n", "\n").strip().split("\n")
     def result_append(self, result: T, timestamp: Timestamp | None = None) -> None:
-        """添加在result末尾"""
+        """以Result[T]的形式,添加在self.result末尾，默认附加时间戳，可以指定"""
         if timestamp is None:
             timestamp = Timestamp()
         self.result.append((timestamp, Result(result)))
@@ -82,26 +83,35 @@ class CmdRecord(Generic[T]):
         return out
 
     def get_result(self) -> list[str]:
-        """获取命令的输出结果，去除ansi转义"""
-        return [remove_ansi(e[1]) for e in self.result]
+        """获取命令的输出结果，去除Result，去除ansi转义\n
+        对于非str类型的结果尝试转换为str"""
+        return [
+            remove_ansi(e[1].get()) if e[1].type is str else str(e[1].get())
+            for e in self.result
+        ]
 
 
-class CmdRecording(CmdRecord):
+class CmdRecording(CmdRecord, Generic[T]):
+    """线程指令的记录类，添加了线程相关的处理"""
+
     def __init__(self, cmd: str, prompt: str) -> None:
         super().__init__(cmd, prompt)
         # for long running
-        self.fifo = queue.Queue()
-        self.stop_event = td.Event()
-        self.long_running_task: td.Thread
+        self.fifo = queue.Queue()  # 用于主线程实时处理线程输出
+        self.stop_event = td.Event()  # 用于停止线程的事件
+        self.long_running_task: td.Thread  # 记录任务本身，便于获取状态
 
     @override
     def task_kill(self):
+        """对于线程任务，发送ctrl-c给远程后本地设置结束事件"""
         if self.stdin is not None:
             self.stdin.write("\x03")
         self.stop_event.set()
 
 
 class MetaRecord(Generic[T]):
+    """元记录，记录类的log"""
+
     def __init__(self, type: str, name: str, info: str) -> None:
         # timestamp
         self.start_time = Timestamp()

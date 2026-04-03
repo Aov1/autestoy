@@ -38,8 +38,8 @@ class Term:
     sw_absolute_timestamp: bool = False
 
     @classmethod
-    def set_time_base(cls, time_base: float):
-        cls.time_base = time_base
+    def set_time_base(cls, time_base: Timestamp):
+        cls.time_base: Timestamp = time_base
 
     @classmethod
     def puts(cls, msg: str) -> tuple[Timestamp, Result[str]]:

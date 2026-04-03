@@ -1,6 +1,8 @@
 import pytest
 
-from autestoy.protocols.ssh import SSH, RemoteConfig
+from autestoy import SSH, AnsiBackground, AnsiColor, AnsiReset, AnsiStyle, RemoteConfig
+
+# from autestoy.protocols.ssh import SSH, RemoteConfig
 
 
 @pytest.fixture(scope="session")
@@ -27,4 +29,5 @@ def ssh(remote: RemoteConfig):
 
 # @pytest.fixture(scope="session")
 def log(title: str):
-    print(f"\n\033[31m{title}\033[0m")
+    style = AnsiColor.black + AnsiBackground.yellow + AnsiStyle.bold
+    print(f"{style}{title}{AnsiReset}")

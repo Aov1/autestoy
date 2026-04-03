@@ -59,8 +59,7 @@ def test_SSH_long_running(ssh: SSH):
     infer_cmd.task_kill()
     tail_cmd.task_kill()
 
-    # test_channel.run("rm log.txt")
-    input("enter quit")
+    time.sleep(0.5)
 
     print(infer_cmd.long_running_task.is_alive())
     print(tail_cmd.long_running_task.is_alive())

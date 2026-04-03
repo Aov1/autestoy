@@ -1,7 +1,6 @@
-import time
-
 from .export.term import Term, TermStyle
 from .protocols.ssh import SSH, Channel_collect, RemoteConfig, SFTP_collect, SSH_collect
+from .tools.ansi import AnsiBackground, AnsiColor, AnsiReset, AnsiStyle
 from .tools.record import CmdRecord
 from .tools.timestamp import Timestamp
 
@@ -16,9 +15,14 @@ __all__ = [
     "SFTP_collect",
     "Term",
     "TermStyle",
-    "TimeBase",
+    "GlobalTimeBase",
 ]
 
-
-TimeBase = time.time()
-Term.set_time_base(TimeBase)
+# 脚本的基础时间
+GlobalTimeBase = Timestamp()
+# 终端显示相对时间的计算基时
+Term.set_time_base(GlobalTimeBase)
+# 导入库时显示本地时间
+Term.putsln(
+    f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}[INFO] Srcipt start at [{Term.time_base}]{AnsiReset}"
+)

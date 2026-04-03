@@ -23,7 +23,7 @@ class TermStyle:
     prompt_font_color = AnsiColor.light_green
     prompt_background_color = AnsiColor.none
 
-    log_font_color = AnsiColor.light_blue
+    log_font_color = AnsiColor.yellow
     log_background_color = AnsiColor.none
 
     warning_font_color = AnsiColor.yellow

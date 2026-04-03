@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# 外部库
 # import asyncio
 # import queue
 import re
@@ -9,11 +10,11 @@ import warnings
 from os import PathLike
 from typing import IO, Any, Callable, Iterator, Self, TypeAlias, Union, overload
 
-# from typing import StrOrBytesPath, _Callback
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes
 from paramiko.sftp_file import SFTPFile
 
+# 相对调用
 from ..export.collect import collect
 from ..export.term import Term
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
@@ -21,18 +22,19 @@ from ..tools.record import CmdRecord, CmdRecording, MetaRecord
 from ..tools.result import Result
 
 # import asyncssh as assh
-from ..tools.timestamp import Timestamp
+# from ..tools.timestamp import Timestamp
 
-StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]  # stable
+
+# 这两项是为了兼容paramiko SFTPClient 方法的参数类型
+StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]
 _Callback: TypeAlias = Callable[[int, int], object]
 
-
+# 收集已经被创建的类，稍微丑陋
 SSH_collect: dict[str, Any] = {}  # 记录所有创建的SSH类
 Channel_collect: dict[str, Any] = {}  # 记录所有创建的Channel类
 SFTP_collect: dict[str, Any] = {}  # 记录所有创建的STFP类
 
 
-# Meta_record: dict[float, Any] = {}  #
 class RemoteConfig:
     """远程配置类，用于配置远程主机的连接信息"""
 
@@ -339,7 +341,7 @@ class Channel:
                 string += welcome_info
 
                 if show_welcome_info:
-                    Term.puts(welcome_info)
+                    Term.puts_msg(welcome_info)
                     # print(welcome_info)
 
                 if tmp := self.prompt_complie.search(remove_ansi(string)):
@@ -347,7 +349,7 @@ class Channel:
             time.sleep(0.01)
             if time.time() - tmp_timestamp > tmp_timeout and not tmp_f_switched_bash:
                 self.shell.send(bytes("bash\n", "utf-8"))
-                Term.puts(
+                Term.puts_msg(
                     f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
                 )
                 tmp_f_switched_bash = True

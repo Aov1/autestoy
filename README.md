@@ -27,10 +27,9 @@ src
 │   │   ├── term.py           # 终端显示、样式、时间戳配置
 │   │   └── web.py            # web报告生成器，暂定niegui
 │   ├── protocols         # 测试通路协议相关源码目录
-│   │   ├── ftp.py            # ftp服务，用于传输下载远程文件
 │   │   ├── jtag.py           # jtag通路，作者相关知识储备较少，优先级降低
 │   │   ├── serial.py         # 串口连接
-│   │   ├── ssh.py            # ssh连接
+│   │   ├── ssh.py            # ssh、sftp
 │   │   └── telnet.py         # telnet协议连接
 │   └── tools             # 工具源码目录
 │       ├── ansi.py           # 终端显示ansi转义
@@ -201,7 +200,7 @@ reg[ :0 , 1:2 , :3 ] == reg[0:3] == Bits( 0x1 , 4 )
 - [x] ssh-SSH/Channel类初始化添加时间戳记录，考虑新的Record类:MataRecord?
 
 - [ ] 统一测试文件，运行时使用ftp传输运行脚本到远程被测试端，测试完成后删除
-	- [ ] ftp服务
+	- [x] ftp服务
   	- [x] 继承并添加Record
 	- [ ] 文件hash校验
 
@@ -221,11 +220,14 @@ reg[ :0 , 1:2 , :3 ] == reg[0:3] == Bits( 0x1 , 4 )
 	- [ ] Field(Bits)：寄存器子字段Bits
 	- [ ] Register(Bits+)：带有字段的定长，
 	- [ ] Packet(Bits)：带有字段的数据包类
+	
+- [ ] obsidian(markdiwn+mermaid) export
+- [ ] web export
+- [ ] pdf export
 
 - [x] BUG:ssh的channel模式run方法，概率性出现回显去除失败。
 - [x] BUG:ssh-create_channel遇到zsh等进行了美化的终端时获取不到prompt死循环->嵌入bash
 
 # 已知问题
 
-- SFTP.remove(path) always Fail at Huawei Matepad
 -

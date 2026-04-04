@@ -42,6 +42,17 @@ class Term:
         cls.time_base: Timestamp = time_base
 
     @classmethod
+    def fmt_timestamp(cls, timestamp: Timestamp | None = None) -> str:
+        if not timestamp:
+            timestamp = Timestamp()
+
+        if cls.sw_absolute_timestamp:  # 显示绝对时间开关
+            timestamp_str = str(timestamp)
+        else:  # 显示相对时间
+            timestamp_str = f"{timestamp - cls.time_base:>{TermStyle.relative_timestamp_width}.{TermStyle.relative_timestamp_bits}f}"
+        return f"{TermStyle.timestamp_background_color}{TermStyle.timestamp_font_color}[{timestamp_str}]{AnsiReset} "
+
+    @classmethod
     def puts_timestamp(cls, timestamp: Timestamp | None = None):
         if not timestamp:
             timestamp = Timestamp()
@@ -70,6 +81,8 @@ class Term:
         msg: str,
         log_time: Timestamp | None = None,
         insert_str_before_msg: str | None = None,
+        set_font_color: str | None = None,
+        set_background_color: str | None = None,
     ) -> tuple[Timestamp, Result[str]]:
         """终端输出带换行，返回时间戳和Result(msg)作为流式处理\n
         是否输出时间戳受到Term类属性控制\n
@@ -79,17 +92,30 @@ class Term:
             log_time = Timestamp()
         if cls.sw_timestamp:  # 显示时间戳开关
             cls.puts_timestamp(log_time)
-            # need test
-            # if cls.sw_absolute_timestamp:  # 显示绝对时间开关
-            #     timestamp_str = str(log_time)
-            # else:  # 显示相对时间
-            #     timestamp_str = f"{log_time - cls.time_base:>{TermStyle.relative_timestamp_width}.{TermStyle.relative_timestamp_bits}f}"
-            # sys_write(
-            #     f"{TermStyle.timestamp_background_color}{TermStyle.timestamp_font_color}[{timestamp_str}]{AnsiReset} "
-            # )
         if insert_str_before_msg:
             sys_write(insert_str_before_msg + " ")
-        sys_write(
-            f"{TermStyle.msg_background_color}{TermStyle.msg_font_color}{msg}{AnsiReset}\n"
+        font_color = TermStyle.msg_font_color if not set_font_color else set_font_color
+        background_color = (
+            TermStyle.msg_background_color
+            if not set_background_color
+            else set_background_color
         )
+        sys_write(f"{background_color}{font_color}{msg}{AnsiReset}\n")
         return log_time, Result(remove_ansi(msg))
+
+
+print()
+
+
+def ulog(
+    *msg: object,
+    override_font_color: str | None = None,
+    override_background_color: str | None = None,
+) -> tuple[Timestamp, Result[str]]:
+    """用户Log，终端输出，带有时间戳"""
+    msg = " ".join(str(m) for m in msg)
+    return Term.putsln(
+        msg,
+        set_font_color=override_font_color,
+        set_background_color=override_background_color,
+    )

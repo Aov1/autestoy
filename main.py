@@ -5,7 +5,7 @@ import autestoy as at
 
 pad = at.RemoteConfig(
     user="u0_a210",
-    ip="192.168.0.32",
+    ip="192.168.18.6",
     password="0402",
     port=8022,
 ).set_name("Huawei Matepad")
@@ -53,6 +53,14 @@ with at.SSH(pad) as dut, at.SSH(local) as loc:
             "autestoy_test/" + pyrun,
         )
         ftp.listdir("autestoy_test")
+        sh = ftp.open("autestoy_test/test.sh", "w")
+        f = sh.result[0][1].get()
+        f.write("echo hello world!\n")
+        f.close()
+        ftp.chmod("autestoy_test/test.sh", 0o777)
+
+    res = dut.exec_run("ls autestoy_test")
+    dut.exec_run("./autestoy_test/test.sh")
 
     res = dut.exec_run("python autestoy_test/pyrun.py 0.2 10")
     for t, r in res.result:

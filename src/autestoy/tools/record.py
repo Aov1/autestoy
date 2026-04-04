@@ -6,7 +6,7 @@ import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import Generic, override
+from typing import Generic, Iterable, Iterator, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
@@ -95,7 +95,28 @@ class CmdRecord(Generic[T]):
             for e in self.result
         ]
 
-    # def search
+    def get_result_string(self) -> str:
+        """获取命令的输出结果字符串，去除ansi转义"""
+        return "\n".join(self.get_result())
+
+    def get_result_iter(self) -> Iterator[str]:
+        """获取命令的输出结果迭代器，去除ansi转义"""
+        return (
+            remove_ansi(e[1].get()) if e[1].type is str else str(e[1].get())
+            for e in self.result
+        )
+
+    def search(self, re_string: str) -> re.Match[str] | None:
+        """搜索命令的输出结果，返回匹配的re.Match对象，未匹配返回None"""
+        for line in self.get_result_iter():
+            match = re.search(re_string, line)
+            if match:
+                return match
+        return None
+
+    def search_all(self, re_string: str) -> Iterator[re.Match[str]]:
+        """搜索命令的输出结果，返回匹配的re.Match对象的迭代器，未匹配返回空迭代器"""
+        return re.finditer(re_string, self.get_result_string())
 
 
 class CmdRecording(CmdRecord, Generic[T]):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import re
 import threading as td
 import time
 
@@ -39,6 +40,13 @@ class CmdRecord(Generic[T]):
         self.result: list[tuple[Timestamp, Result[T]]] = []
         self.stdin: pk_ChannelStdinFile | None = None
 
+    def __contains__(self, string: str) -> bool:
+        """支持if string in record的判断，对于每一行进行检索"""
+        for each_line in self.get_result():
+            if string in each_line:
+                return True
+        return False
+
     def task_kill(self):
         """非线程任务，只发送ctrl-c"""
         if self.stdin is not None:
@@ -57,9 +65,6 @@ class CmdRecord(Generic[T]):
             else time.time() - self.start_time
         )
 
-    # def record_result(self, result: str) -> None:
-    #     """记录命令的输出结果，包括ansi"""
-    #     self.result = result.replace("\r\n", "\n").strip().split("\n")
     def result_append(self, result: T, timestamp: Timestamp | None = None) -> None:
         """以Result[T]的形式,添加在self.result末尾，默认附加时间戳，可以指定"""
         if timestamp is None:
@@ -90,6 +95,8 @@ class CmdRecord(Generic[T]):
             for e in self.result
         ]
 
+    # def search
+
 
 class CmdRecording(CmdRecord, Generic[T]):
     """线程指令的记录类，添加了线程相关的处理"""
@@ -102,11 +109,32 @@ class CmdRecording(CmdRecord, Generic[T]):
         self.long_running_task: td.Thread  # 记录任务本身，便于获取状态
 
     @override
+    def __contains__(self, string: str) -> bool:
+        """支持 if string in record 的判断，每次对于fifo进行判断，消耗fifo"""
+        return True if string in self.get_once() else False
+
+    @override
     def task_kill(self):
         """对于线程任务，发送ctrl-c给远程后本地设置结束事件"""
         if self.stdin is not None:
             self.stdin.write("\x03")
         self.stop_event.set()
+
+    def get_once(self) -> None | str:
+        """获取一次fifo中的数据，返回去除ansi转义的字符串，当前fifo为空返回None"""
+        return remove_ansi(self.fifo.get()) if not self.fifo.empty() else None
+
+    def search_next_line(
+        self, pattern: str, flags: re._FlagsType = 0
+    ) -> None | re.Match[str]:
+        """匹配一次fifo中的数据，返回re.Match对象，当前fifo为空返回None，消耗fifo"""
+        return re.search(pattern, self.get_once(), flags)
+
+    def find_next_line(
+        self, pattern: str, flags: re._FlagsType = 0
+    ) -> None | list[str]:
+        """查找一次fifo中的数据，返回匹配到的字符串列表，当fifo为空或未匹配时返回空列表，消耗fifo"""
+        return re.findall(pattern, self.get_once(), flags)
 
 
 class MetaRecord(Generic[T]):

@@ -6,7 +6,7 @@ import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import Generic, Iterable, Iterator, override
+from typing import Generic, Iterator, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
@@ -107,7 +107,7 @@ class CmdRecord(Generic[T]):
         )
 
     def search(self, re_string: str) -> re.Match[str] | None:
-        """搜索命令的输出结果，返回匹配的re.Match对象，未匹配返回None"""
+        """搜索命令的输出结果，匹配立即返回re.Match对象，未匹配返回None"""
         for line in self.get_result_iter():
             match = re.search(re_string, line)
             if match:
@@ -131,8 +131,9 @@ class CmdRecording(CmdRecord, Generic[T]):
 
     @override
     def __contains__(self, string: str) -> bool:
-        """支持 if string in record 的判断，每次对于fifo进行判断，消耗fifo"""
-        return True if string in self.get_once() else False
+        """支持 if string in record: 的语法，每次对于fifo进行判断，消耗fifo"""
+        line = self.get_once()
+        return True if line and string in line else False
 
     @override
     def task_kill(self):
@@ -149,13 +150,15 @@ class CmdRecording(CmdRecord, Generic[T]):
         self, pattern: str, flags: re._FlagsType = 0
     ) -> None | re.Match[str]:
         """匹配一次fifo中的数据，返回re.Match对象，当前fifo为空返回None，消耗fifo"""
-        return re.search(pattern, self.get_once(), flags)
+        line = self.get_once()
+        return re.search(pattern, line, flags) if line else None
 
     def find_next_line(
         self, pattern: str, flags: re._FlagsType = 0
     ) -> None | list[str]:
         """查找一次fifo中的数据，返回匹配到的字符串列表，当fifo为空或未匹配时返回空列表，消耗fifo"""
-        return re.findall(pattern, self.get_once(), flags)
+        line = self.get_once()
+        return re.findall(pattern, line, flags) if line else None
 
 
 class MetaRecord(Generic[T]):

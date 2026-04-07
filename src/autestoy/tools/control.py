@@ -3,6 +3,8 @@ import time
 from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
 from .ansi import AnsiColor, AnsiReset
+from .record import CmdRecord
+from .result import Result
 from .timestamp import Timestamp
 
 
@@ -34,3 +36,21 @@ class TrySeconds:
 
     def check_timeout(self) -> bool:
         return not bool(self)
+
+
+def ulog(
+    *msg: object,
+    override_font_color: str | None = None,
+    override_background_color: str | None = None,
+) -> tuple[Timestamp, Result[str]]:
+    """用户Log，终端输出，带有时间戳"""
+    long_msg = " ".join(str(m) for m in msg)
+    record = CmdRecord(
+        cmd=long_msg,
+        prompt="[UserLog]:",
+    )
+    return Term.putsln(
+        record.get_fmt_prompt(),
+        set_font_color=override_font_color,
+        set_background_color=override_background_color,
+    )

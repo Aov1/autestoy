@@ -4,8 +4,9 @@ from pprint import pprint
 
 from conftest import log
 
-from autestoy.export.term import Term, ulog
+from autestoy.export.term import Term
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
+from autestoy.tools.control import ulog
 from autestoy.tools.record import CmdRecord
 
 

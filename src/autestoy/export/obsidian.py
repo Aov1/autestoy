@@ -13,7 +13,7 @@ from ..protocols.ssh import SFTP, SSH, Channel
 from ..tools.local import Local
 
 # from .baseinfo import get_script_dir, get_script_name
-from .collect import CollectObj, CollectType
+from .collect import CollectObj
 from .term import Term
 
 

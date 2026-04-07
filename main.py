@@ -1,4 +1,4 @@
-from autestoy import SSH, RemoteConfig
+from autestoy import SSH, RemoteConfig, ulog
 from autestoy.export.obsidian import ObsidianExporter
 from autestoy.tools.local import Local
 
@@ -24,6 +24,7 @@ def main():
     ftp.getcwd()
     ftp.listdir()
     pc.run("asdasdasdasd")
+    ulog("END HERE")
 
     ObsidianExporter("/home/aoiiix/ObsidianLib/note/").save()
 

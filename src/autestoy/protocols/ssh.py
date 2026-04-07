@@ -8,7 +8,7 @@ import threading as td
 import time
 import warnings
 from os import PathLike
-from typing import IO, Any, Callable, Iterator, Self, TypeAlias, Union, overload
+from typing import IO, Callable, Iterator, Self, TypeAlias, Union, overload
 
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes

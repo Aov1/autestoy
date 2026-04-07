@@ -16,7 +16,8 @@ class Timestamp:
     @classmethod
     def len(cls) -> int:
         """返回转换成字符串的长度"""
-        return len(cls(0))
+        tmp = Timestamp(0)
+        return len(str(tmp))
 
     def __init__(self, now_time: float | None = None):
         if now_time:

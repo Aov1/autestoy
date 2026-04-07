@@ -113,9 +113,9 @@ def ulog(
     override_background_color: str | None = None,
 ) -> tuple[Timestamp, Result[str]]:
     """用户Log，终端输出，带有时间戳"""
-    msg = " ".join(str(m) for m in msg)
+    long_msg = " ".join(str(m) for m in msg)
     return Term.putsln(
-        msg,
+        long_msg,
         set_font_color=override_font_color,
         set_background_color=override_background_color,
     )

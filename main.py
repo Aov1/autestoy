@@ -86,7 +86,6 @@
 # for e in cmd_all:
 #     print(e.id, e.start_time, e.end_time, e.cmd)
 
-import subprocess as sp
 
 from autestoy.tools.local import Local
 

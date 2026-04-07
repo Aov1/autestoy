@@ -3,7 +3,6 @@ from __future__ import annotations
 import getpass
 import subprocess as sp
 import sys
-from typing import Any
 
 from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term

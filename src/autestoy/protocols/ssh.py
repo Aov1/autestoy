@@ -212,8 +212,6 @@ class SSH:
 
     def exec_run(self, cmd: str) -> CmdRecord:
         """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n
-        与exec_run的区别在于，exec_run_bata会记录每一行命令的执行时间，而exec_run不会\n
-        实现方式也由recv改为readline
         ```python
         remote_config = RemoteConfig(
             user="user",
@@ -248,6 +246,7 @@ class SSH:
         else:
             if (tmp_out := stdout.readline().strip()) != "":
                 record.result.append(Term.putsln(tmp_out))
+            record.exit_code = stdout.channel.recv_exit_status()
         record.record_end()
         return record
 
@@ -268,8 +267,9 @@ class SSH:
             time.sleep(0.005)
         else:
             record.record_end()
-            # DBG
-            Term.putsln(f"[{record.id}] task end")
+            record.exit_code = stdout.channel.recv_exit_status()
+            # DBGexit_status()
+            # Term.putsln(f"[{record.id}] task end")
 
     def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording:
         head_path_info, processed_cmd = self._path_process(cmd)

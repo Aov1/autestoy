@@ -39,6 +39,7 @@ class CmdRecord(Generic[T]):
         self.cmd: str = cmd
         self.result: list[tuple[Timestamp, Result[T]]] = []
         self.stdin: pk_ChannelStdinFile | None = None
+        self.exit_code: int | None = None
 
     def __contains__(self, string: str) -> bool:
         """支持if string in record的判断，对于每一行进行检索"""

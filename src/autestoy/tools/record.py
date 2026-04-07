@@ -6,7 +6,7 @@ import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import Generic, Iterable, Iterator, overload, override
+from typing import Generic, Iterator, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 

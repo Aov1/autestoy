@@ -60,7 +60,7 @@ conf = att.RemoteConfig(user='root',ip='xxx.xxx.xxx.xxx',password='xxxx').set_na
 dut = att.SSH(conf) # 连接ssh
 # 对一条指令的结果进行处理
 record = dut.exec_run('ls')
-if 'log.txt' in record:
+if 'log.txt' in record: 
     do_something()
 
 ```

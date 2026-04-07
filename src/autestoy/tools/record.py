@@ -187,7 +187,7 @@ class CmdRecording(CmdRecord, Generic[T]):
         return remove_ansi(self.fifo.get()) if not self.fifo.empty() else None
 
     def clean_fifo(self) -> None:
-        """清空fifo中的所有数据"""
+        """清空fifo中目前所有的数据"""
         while not self.fifo.empty():
             self.fifo.get()
 
@@ -201,7 +201,7 @@ class CmdRecording(CmdRecord, Generic[T]):
         """
         lines = []
         t_start = time.time()
-        for _ in range(times):
+        while len(lines) < times:
             if time.time() - t_start > timeout and timeout != 0:
                 if raise_when_timeout:
                     raise TimeoutError("force_get_fifo timeout")
@@ -235,6 +235,28 @@ class CmdRecording(CmdRecord, Generic[T]):
         if line is None:
             return None
         return line, re.findall(pattern, line, flags)
+
+    def fifo_wait(
+        self, re_string: str | None = None, timeout: float = 10
+    ) -> None | list[str]:
+        """等待fifo中有指定的数据，返回截至找到指定字符串之前的所有fifo line，当然消耗fifo\n
+        re_string:需要正则匹配的字符串，为None时匹配任何字符\n
+        timeout设置超时，非0启用，超时返回None；timeout=0不启用超时\n"""
+        lines: list[str] = []  # 存储获取的fifo line
+        t_start = time.time()  # 开始时间
+        while True:
+            line = self.get_once()  # 获取一次fifo line
+            if line is None:  # fifo为空
+                if timeout != 0 and time.time() - t_start > timeout:  # 是否超时
+                    return None  # 超时结束
+                continue  # 未超时继续
+            lines.append(line)  # fifo line 非空保存
+
+            if re_string is None:  # 未设置匹配字符串立即结束
+                return lines
+            else:  # 设置了匹配字符串
+                if re.search(re_string, line):  # 进行匹配
+                    return lines  # 匹配到立即返回
 
 
 class MetaRecord(Generic[T]):

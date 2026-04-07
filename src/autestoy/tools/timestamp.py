@@ -15,7 +15,9 @@ class Timestamp:
 
     @classmethod
     def len(cls) -> int:
-        return len(cls.fmt) + 2 + cls.millis_width - 2
+        """返回转换成字符串的长度"""
+        tmp = Timestamp(0)
+        return len(str(tmp))
 
     def __init__(self, now_time: float | None = None):
         if now_time:
@@ -55,10 +57,13 @@ class Timestamp:
             return other - self.timestamp
 
     def update_timestamp(self):
+        """强制更新到现在的时间"""
         self.timestamp = time.time()
 
     def to_float(self) -> float:
+        """转换为unix时间戳"""
         return self.timestamp
 
-    def to_seconds_from(self, base: float) -> float:
+    def to_seconds_from(self, base: Timestamp | float = 0) -> float:
+        """返回从base时间戳开始计算的秒数"""
         return self.timestamp - base

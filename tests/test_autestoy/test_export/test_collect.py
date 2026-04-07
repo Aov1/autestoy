@@ -1,10 +1,4 @@
-from autestoy.protocols.ssh import (
-    SSH,
-    Channel,
-    Channel_collect,
-    SFTP_collect,
-    SSH_collect,
-)
+from autestoy.protocols.ssh import SSH, Channel, CollectObj
 
 
 def test_collect(remote):
@@ -17,11 +11,5 @@ def test_collect(remote):
     Channel(t2)
     t1.create_ftp()
     t2.create_ftp()
-    for k, v in SSH_collect.items():
-        print(k, v.name)
-
-    for k, v in Channel_collect.items():
-        print(k, v.name)
-
-    for k, v in SFTP_collect.items():
-        print(k, v.name)
+    for k, v in CollectObj:
+        print(k, v)

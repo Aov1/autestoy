@@ -34,25 +34,58 @@ src
 │   └── tools             # 工具源码目录
 │       ├── ansi.py           # 终端显示ansi转义
 │       ├── datatype.py       # 数据类，创建易于操作的寄存器值以及数据转换
-│       ├── result.py         # 定义协议返回的结果，用于处理与报告生成
-│       └── timestamp.py      # 时间戳工具
+│       ├── record.py         # 定义记录类，用于处理与报告生成
+│       ├── result.py         # 定义协议返回的结果
+│       └── timestamp.py      # 定义时间戳工具
 ...
 ```
-
-## 依赖关系
 
 # 未来规划
 
 - 尽快完善基础功能，至少完成一条完整的测试-显示-导出报告的流程
 - 多环境测试
-- 打包发布
 
 ### 畅想（coding过程中的灵光一动）
 - 实现字段类，将寄存器拆为多个字段直接控制
 - 元编程，实时处理
 
 # 快速开始
-无
+
+## ssh
+
+### exec_run
+```python
+import autestoy as att
+conf = att.RemoteConfig(user='root',ip='xxx.xxx.xxx.xxx',password='xxxx').set_name('DUT') # 配置remote
+dut = att.SSH(conf) # 连接ssh
+# 对一条指令的结果进行处理
+record = dut.exec_run('ls')
+if 'log.txt' in record: 
+    do_something()
+
+```
+### long_running
+
+```python
+import autestoy as att
+conf = att.RemoteConfig(user='root',ip='xxx.xxx.xxx.xxx',password='xxxx').set_name('DUT') # 配置remote
+dut = att.SSH(conf) # 连接ssh
+# 对持续运行的指令进行处理
+record = dut.long_running('tail -f log.txt') # 非阻塞运行
+dut.exec_run('./create_log.sh') 
+
+ts = att.TrySeconds(10)
+while ts:
+    if res:=record.search_next_line(r'fail\s+at\s+(\d+:\d+)'): 
+        # 例如fifo获取字符串"[LOG] fail at 12:04 !" 会匹配:
+        # res.group(0)="fail at 12:04"
+        # res.group(1)="12:04"
+        ulog('found script error at:',res.group(1)) 
+        break
+
+record.task_kill()
+assert not record.long_running_task.is_alive()    
+```
 
 # 具体细节
 （想到哪写到哪）
@@ -86,12 +119,14 @@ dut.exec_run('pwd')
 ```
 还实现了long_running即长时间后台运行命令，通过threading库实现多线程运行，以达成不阻塞后续命令运行的效果。使用fifo在进程间传递命令的输出，可以做到实时处理输出特征。
 ```python
+remote_config = RemoteConfig(...)
+dut = SSH(remote_config)
 process = dut.long_running('python create_log.py') # 设想这是一条可以持续产生log的脚本
 tail_res = dut.long_running('tail -f log.txt') # 实时显示log输出
 # 粗糙的处理流程，待改进
-now = time.time()
-while time.time() - now < 10: # 10s后退出
-    if not tail_res.fifo.enpty() and 'fail' in tail_res.fifo.get(): # fifo非空且'fail' 在fifo中，则退出
+try_10s = TrySeconds(10)
+while try_10s: # 10s后退出
+    if tail_res.search_next_line('fail'): # fifo非空且'fail' 在fifo中，则退出
         break
 # 杀死进程：内部先使用stdin发送ctrl-c给远程退出信号，再运行td.Event.set()结束本地线程。
 process.task_kill()
@@ -204,6 +239,7 @@ reg[ :0 , 1:2 , :3 ] == reg[0:3] == Bits( 0x1 , 4 )
 - [ ] 为?Record类添加方便的取值方法
 - [ ] SSH、Channel、SFTP添加最近一次输出缓存
 - [ ] ?Reocrd类添加保存错误退出码的属性
+- [ ] ?Record添加正则匹配
 
 - [ ] 统一测试文件，运行时使用ftp传输运行脚本到远程被测试端，测试完成后删除
 	- [x] ftp服务

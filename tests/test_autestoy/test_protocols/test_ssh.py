@@ -4,7 +4,7 @@ from pprint import pprint
 
 from conftest import log
 
-from autestoy.export.term import Term
+from autestoy.export.term import Term, ulog
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
 from autestoy.tools.record import CmdRecord
 
@@ -29,10 +29,13 @@ def test_SSH(remote):
     remote_pad = SSH(remote, timeout=60)
     assert remote_pad.is_connected(), "SSH连接失败"
 
-    remote_pad.exec_run("pwd")
-    remote_pad.exec_run("a_cmd_nononononoerr")
+    res = remote_pad.exec_run("pwd")
+    ulog("exit code :", res.exit_code)
+    res = remote_pad.exec_run("a_cmd_nononononoerr")
+    ulog("exit code :", res.exit_code)
 
-    remote_pad.with_path("project/autestoy_sim").exec_run("python t10s.py")
+    res = remote_pad.with_path("project/autestoy_sim").exec_run("python t10s.py")
+    ulog("exit code :", res.exit_code)
 
 
 def test_Channel(ssh: SSH):

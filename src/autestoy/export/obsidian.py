@@ -2,22 +2,55 @@
 生成obsidian格式的导出文件相关工具（markdown + mermaid）
 """
 
-from .baseinfo import get_script_dir, get_script_name
+import inspect
+import os
+
+from autestoy.tools.record import CmdRecord
+
+from ..protocols.ssh import SFTP, SSH, Channel
+
+# from ..tools.ansi import remove_ansi
+from ..tools.local import Local
+
+# from .baseinfo import get_script_dir, get_script_name
+from .collect import CollectObj, CollectType
+from .term import Term
 
 
 class ObsidianExporter:
     def __init__(self, output_path: str | None = None) -> None:
-        self.output_path = output_path if output_path else get_script_dir()
-        self.file_name = get_script_name().replace(".py", ".md")
+        self.output_path = (
+            output_path if output_path else os.path.abspath(inspect.stack()[1].filename)
+        )
+        self.file_name = os.path.basename(inspect.stack()[1].filename).replace(
+            ".py", ".md"
+        )
+        self.cmd_records = []
 
-        # tmp = (
-        #     output_path if output_path else os.path.abspath(inspect.stack()[1].filename)
-        # )
-        # self.platfrom = sys.platform
-        # if self.platfrom == "win32":
-        #     self.full_path = tmp.replace("\\", "/")
-        # else:
-        #     self.full_path = tmp
+    def _get_cmd_records(self):
+        for each in CollectObj:
+            if isinstance(each[1], SSH):
+                self.cmd_records += each[1].cmds
+            elif isinstance(each[1], Channel):
+                self.cmd_records += each[1].cmds
+            elif isinstance(each[1], SFTP):
+                self.cmd_records += each[1].cmds
+            elif isinstance(each[1], Local):
+                self.cmd_records += each[1].cmds
 
-        # self.output_path = os.path.dirname(self.full_path)
-        # self.file_name = os.path.basename(self.full_path)
+    def _sort_cmd_records(self):
+        self.cmd_records.sort(key=lambda x: x.start_time)
+
+    def save(self):
+        self._get_cmd_records()
+        self._sort_cmd_records()
+        with open(self.output_path + self.file_name, "w") as f:
+            f.write("```bash\n")
+            for cmd in self.cmd_records:
+                cmd: CmdRecord[str]
+                tmp = f"[{cmd.start_time - Term.time_base:.3f}] {cmd.get_fmt_prompt(False)}"
+                # tmp = tmp.replace("[", "\\[").replace("]", "\\]")
+                f.write(tmp + "\n")
+                for e in cmd.result:
+                    f.write(f"[{e[0] - Term.time_base:.3f}] {str(e[1].get())}\n")
+            f.write("```")

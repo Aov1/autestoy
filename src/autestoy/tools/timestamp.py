@@ -56,6 +56,36 @@ class Timestamp:
         else:
             return other - self.timestamp
 
+    def __lt__(self, other: Timestamp | float) -> bool:
+        if isinstance(other, Timestamp):
+            return self.timestamp < other.timestamp
+        else:
+            return self.timestamp < other
+
+    def __gt__(self, other: Timestamp | float) -> bool:
+        if isinstance(other, Timestamp):
+            return self.timestamp > other.timestamp
+        else:
+            return self.timestamp > other
+
+    def __le__(self, other: Timestamp | float) -> bool:
+        if isinstance(other, Timestamp):
+            return self.timestamp <= other.timestamp
+        else:
+            return self.timestamp <= other
+
+    def __ge__(self, other: Timestamp | float) -> bool:
+        if isinstance(other, Timestamp):
+            return self.timestamp >= other.timestamp
+        else:
+            return self.timestamp >= other
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Timestamp):
+            return self.timestamp == other.timestamp
+        else:
+            return self.timestamp == other
+
     def update_timestamp(self):
         """强制更新到现在的时间"""
         self.timestamp = time.time()

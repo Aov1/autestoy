@@ -143,22 +143,59 @@ class CmdRecording(CmdRecord, Generic[T]):
         self.stop_event.set()
 
     def get_once(self) -> None | str:
-        """获取一次fifo中的数据，返回去除ansi转义的字符串，当前fifo为空返回None"""
+        """获取一次fifo中的数据，返回去除ansi转义的字符串\n
+        由于可能存在fifo为空的情况，且空fifo返回None，所以并不意味着稳定的读取一行输出"""
         return remove_ansi(self.fifo.get()) if not self.fifo.empty() else None
+
+    def clean_fifo(self) -> None:
+        """清空fifo中的所有数据"""
+        while not self.fifo.empty():
+            self.fifo.get()
+
+    def force_get_fifo(
+        self, times: int = 1, timeout: float = 2, raise_when_timeout: bool = False
+    ) -> list[str]:
+        """强制按次数获取fifo中的数据，返回去除 ansi 转义的字符串列表，消耗fifo\n
+        fifo为空将等待，会阻塞运行\n
+        timeout 为等待超时时间，为0忽略\n
+        raise_when_timeout 为超时是否抛出异常，不抛出异常时返回已经获取的fifo line\n
+        """
+        lines = []
+        t_start = time.time()
+        for _ in range(times):
+            if time.time() - t_start > timeout and timeout != 0:
+                if raise_when_timeout:
+                    raise TimeoutError("force_get_fifo timeout")
+                return lines
+            line = self.get_once()
+            if line is None:
+                continue
+            lines.append(line)
+        return lines
 
     def search_next_line(
         self, pattern: str, flags: re._FlagsType = 0
-    ) -> None | re.Match[str]:
-        """匹配一次fifo中的数据，返回re.Match对象，当前fifo为空返回None，消耗fifo"""
+    ) -> None | tuple[str, re.Match[str] | None]:
+        """匹配一次fifo中的数据，消耗fifo\n
+        当fifo为空时返回None\n
+        fifo非空时进行正则匹配，返回 输出行 和 匹配结果\n
+        匹配结果也可能为空"""
         line = self.get_once()
-        return re.search(pattern, line, flags) if line else None
+        if line is None:
+            return None
+        return line, re.search(pattern, line, flags)
 
     def find_next_line(
         self, pattern: str, flags: re._FlagsType = 0
-    ) -> None | list[str]:
-        """查找一次fifo中的数据，返回匹配到的字符串列表，当fifo为空或未匹配时返回空列表，消耗fifo"""
+    ) -> None | tuple[str, list[str | None]]:
+        """查找一次fifo中的数据，消耗fifo\n
+        当fifo为空时返回None\n
+        fifo非空时进行正则匹配，返回 输出行 和 匹配结果列表\n
+        匹配失败时返回的是 输出行 和 空列表"""
         line = self.get_once()
-        return re.findall(pattern, line, flags) if line else None
+        if line is None:
+            return None
+        return line, re.findall(pattern, line, flags)
 
 
 class MetaRecord(Generic[T]):

@@ -6,7 +6,7 @@ import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import Generic, Iterator, override
+from typing import Generic, Iterable, Iterator, overload, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
@@ -66,7 +66,7 @@ class CmdRecord(Generic[T]):
         )
 
     def result_append(self, result: T, timestamp: Timestamp | None = None) -> None:
-        """以Result[T]的形式,添加在self.result末尾，默认附加时间戳，可以指定"""
+        """以Result[T]的形式,添加在self.result末尾，默认附加时间戳，时间戳可以指定"""
         if timestamp is None:
             timestamp = Timestamp()
         self.result.append((timestamp, Result(result)))
@@ -96,7 +96,7 @@ class CmdRecord(Generic[T]):
         ]
 
     def get_result_string(self) -> str:
-        """获取命令的输出结果字符串，去除ansi转义"""
+        """获取命令的输出结果字符串，将多行输出合并，去除ansi转义"""
         return "\n".join(self.get_result())
 
     def get_result_iter(self) -> Iterator[str]:
@@ -117,6 +117,45 @@ class CmdRecord(Generic[T]):
     def search_all(self, re_string: str) -> Iterator[re.Match[str]]:
         """搜索命令的输出结果，返回匹配的re.Match对象的迭代器，未匹配返回空迭代器"""
         return re.finditer(re_string, self.get_result_string())
+
+    def cut_fields(
+        self,
+        *fields: int,
+        re_delimiter: str = r"\t",
+    ) -> list[list[str]]:
+        """切割命令的输出结果，返回切割后的字段二维列表。\n
+        类似于linux的cut -d "<chr>" -f <n>命令，但支持了正则匹配分隔符号"""
+
+        result = []
+        for line in self.get_result_iter():
+            tmp = []
+            res = re.split(re_delimiter, line)
+            for f in fields:
+                if f <= 0:
+                    tmp = []
+                    tmp.append(res)
+                    break
+                else:
+                    tmp.append(res[f - 1]) if f <= len(res) else tmp.append("")
+            result.append(tmp)
+        return result
+
+    def cut_characters(self, *characters: tuple[int, int]) -> list[list[str]]:
+        """切割命令的输出结果，返回切割后的字符二维列表。\n
+        characters: 字符范围的元组，(start, end)，start和end都是从1开始的索引\n
+        start，end包含进范围之中\n
+        支持多组索引，逗号分隔"""
+        result = []
+        for line in self.get_result_iter():
+            tmp = []
+            for char_start, char_end in characters:
+                if char_start <= 1:
+                    char_start = 1
+                if char_end > len(line):
+                    char_end = len(line)
+                tmp.append(line[char_start - 1 : char_end])
+            result.append(tmp)
+        return result
 
 
 class CmdRecording(CmdRecord, Generic[T]):

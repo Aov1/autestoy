@@ -26,15 +26,19 @@ class Local:
         record = CmdRecord[str](
             cmd=cmd, prompt=f"[Local {self.name}][{self.meta_record.info}]$"
         )
-        Term.putsln(record.get_fmt_prompt())
-        result = sp.run(cmd, shell=True, capture_output=True)
-        out = result.stdout.decode().strip()
-        if out != "":
-            record.result_append(out)
-            Term.putsln(out)
-        err = result.stderr.decode().strip()
-        if err != "":
-            record.result_append(err)
-            Term.putsln(err, set_font_color="red")
         self.cmds.append(record)
+        Term.putsln(record.get_fmt_prompt())
+        res = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        if res.stdout is None or res.stderr is None:
+            raise ValueError("stdout or stderr is None")
+        while True:
+            line = res.stdout.readline().strip()
+            if line == "" and res.poll() is not None:
+                break
+            if line != "":
+                record.result.append(Term.putsln(line))
+            err = res.stderr.readline().strip()
+            if err != "":
+                record.result.append(Term.putsln(err, set_font_color="red"))
+        record.exit_code = res.poll()
         return record

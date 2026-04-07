@@ -1,10 +1,12 @@
 import time
 
+from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
 from .ansi import AnsiColor, AnsiReset
 from .timestamp import Timestamp
 
 
+@collect(CollectType.TrySeconds, CollectObj)
 class TrySeconds:
     """创建一个计时器，经过设置的时间后将返回False"""
 

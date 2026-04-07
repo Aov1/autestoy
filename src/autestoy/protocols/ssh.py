@@ -15,7 +15,7 @@ from paramiko.sftp_attr import SFTPAttributes
 from paramiko.sftp_file import SFTPFile
 
 # 相对调用
-from ..export.collect import collect
+from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.record import CmdRecord, CmdRecording, MetaRecord
@@ -30,9 +30,9 @@ StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]
 _Callback: TypeAlias = Callable[[int, int], object]
 
 # 收集已经被创建的类，稍微丑陋
-SSH_collect: dict[str, Any] = {}  # 记录所有创建的SSH类
-Channel_collect: dict[str, Any] = {}  # 记录所有创建的Channel类
-SFTP_collect: dict[str, Any] = {}  # 记录所有创建的STFP类
+# SSH_collect: dict[str, Any] = {}  # 记录所有创建的SSH类
+# Channel_collect: dict[str, Any] = {}  # 记录所有创建的Channel类
+# SFTP_collect: dict[str, Any] = {}  # 记录所有创建的STFP类
 
 
 class RemoteConfig:
@@ -51,7 +51,7 @@ class RemoteConfig:
         return self
 
 
-@collect(SSH_collect)
+@collect(CollectType.SSH, CollectObj)
 class SSH:
     """SSH协议类，用于连接远程主机"""
 
@@ -296,7 +296,7 @@ class SSH:
         return sftp
 
 
-@collect(Channel_collect)
+@collect(CollectType.Channel, CollectObj)
 class Channel:
     """通道类，用于管理SSH通道"""
 
@@ -455,7 +455,7 @@ class Channel:
                 return [self.run(cmds)]
 
 
-@collect(SFTP_collect)
+@collect(CollectType.SFTP, CollectObj)
 class SFTP:
     """继承自paramiko的SFTPClient，实现时间戳记录，用法与SFTPClient基本一致\n
     套壳实现了大部分同名方法，修改了部分有返回值的方法，以保持风格一致"""

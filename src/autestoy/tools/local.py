@@ -5,15 +5,13 @@ import subprocess as sp
 import sys
 from typing import Any
 
-from ..export.collect import collect
+from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
 from .record import CmdRecord, MetaRecord
 from .timestamp import Timestamp
 
-Local_collect: dict[str, Any] = {}
 
-
-@collect(Local_collect)
+@collect(CollectType.Local, CollectObj)
 class Local:
     def __init__(self):
         self.name = str(sys.platform)

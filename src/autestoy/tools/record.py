@@ -133,8 +133,8 @@ class CmdRecord(Generic[T]):
             res = re.split(re_delimiter, line)
             for f in fields:
                 if f <= 0:
-                    tmp = []
-                    tmp.append(res)
+                    tmp = res
+                    # tmp.append(res)
                     break
                 else:
                     tmp.append(res[f - 1]) if f <= len(res) else tmp.append("")

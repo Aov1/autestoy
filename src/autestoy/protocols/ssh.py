@@ -56,7 +56,10 @@ class SSH:
     """SSH协议类，用于连接远程主机"""
 
     def __init__(
-        self, remote_config: RemoteConfig, timeout: float | None = None
+        self,
+        remote_config: RemoteConfig,
+        timeout: float | None = None,
+        raise_when_timeout: bool = True,
     ) -> None:
         # class create reocrd
         self.remote_config: RemoteConfig = remote_config
@@ -85,7 +88,12 @@ class SSH:
         try:
             self._connect()
         except Exception as e:
-            warnings.warn(f"Failed to connect to {self.remote_config.name}: {e}")
+            if raise_when_timeout:
+                raise TimeoutError(
+                    f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.ip}] TimeOut!"
+                )
+            else:
+                warnings.warn(f"Failed to connect to {self.remote_config.name}: TimeOut!")
         # check connect
         if self.is_connected():
             self.meta_record.logs.append(

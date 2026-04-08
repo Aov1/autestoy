@@ -157,3 +157,13 @@ def test_exec_run(ssh: SSH):
     Term.sw_timestamp = False
     ssh.exec_run("ls")
     ssh.with_path("project/autestoy_sim").exec_run("python t10s.py")
+
+
+def test_Channel_get_exit_code(ssh: SSH):
+    ch = ssh.create_channel()
+    res = ch.run("ls")
+    assert res.exit_code == 0
+    res = ch.run("pwd")
+    assert res.exit_code == 0
+    res = ch.run("abcdeefefe")
+    assert res.exit_code == 127

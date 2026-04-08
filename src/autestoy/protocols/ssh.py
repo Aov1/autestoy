@@ -424,7 +424,9 @@ class Channel:
                     break
 
             time.sleep(0.005)
+
         record.record_end()
+        record.exit_code = self._get_exit_code()
         return record
 
     @overload
@@ -453,6 +455,49 @@ class Channel:
                 return self.run_lines(cmd_list)
             else:  # 命令只有一行，统一列表返回格式
                 return [self.run(cmds)]
+
+    def _get_exit_code(self):
+        """获取上一条命令的退出码，退出码获取一次后清除\n
+        运行echo $?实现，内部调用"""
+        self._get_recv_buf()
+        self.shell.send(b"echo $?\r\n")
+        buf = b""
+        got_cmd = False
+        got_code = False
+        got_end = False
+        code = None
+        while True:
+            if self.shell.recv_ready():
+                buf += self.shell.recv(65535)
+                buf = buf.replace(b"\r\n", b"\n")
+                while b"\n" in buf:
+                    line_b, buf = buf.split(b"\n", 1)
+                    line = line_b.decode().strip().replace("\r", "")
+                    if "echo $?" in remove_ansi(line):
+                        got_cmd = True
+                        continue
+
+                    if got_cmd and not got_code:
+                        code = int(remove_ansi(line))
+                        got_code = True
+                        continue
+
+                    if self.prompt_complie.search(
+                        remove_ansi(line)
+                    ):  # 当前行与命令行提示符匹配
+                        self.prompt_now = remove_ansi(line).strip(
+                            "\r\n "
+                        )  # 更新命令行提示符
+                        got_end = True  # 命令行提示符处理完成标志置位
+                        break
+            if got_end:
+                break
+        if got_code and got_cmd and got_end and code is not None:
+            return code
+
+    def _get_recv_buf(self) -> bytes | None:
+        if self.shell.recv_ready():
+            return self.shell.recv(65535)
 
 
 @collect(CollectType.SFTP, CollectObj)

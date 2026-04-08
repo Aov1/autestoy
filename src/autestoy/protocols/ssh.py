@@ -75,7 +75,7 @@ class SSH:
         self.timeout: None | float = timeout
         # sub record
         self.channels: list[Channel] = []  # 记录子通道
-        self.cmds: list[CmdRecord] = []  # 记录运行的命令
+        self.cmds: list[CmdRecord[str]] = []  # 记录运行的命令
         self.sftp: list[SFTP] = []  # 记录开启的SFTP服务
         # path config
         self.global_path: str | None = None
@@ -169,14 +169,14 @@ class SSH:
         self.temp_path = path
         return self
 
-    def cd(self, path: str) -> CmdRecord:
+    def cd(self, path: str) -> CmdRecord[str]:
         """改变当前路径，作用于global_path，但是受到with_path方法维护的temp_path的影响\n
         当temp_path非空执行cd后清除temp_path，优先级高于global_path\n
         不管被哪个路径影响，最后根据运行返回的路径覆盖global_path。\n
         路径错误或不存在不会对gloabl_path赋值。
         """
         head_path_info, _ = self._path_process("")
-        record = CmdRecord(
+        record = CmdRecord[str](
             f"cd {path}",
             f"[{self.name}]{head_path_info} $",
         )
@@ -210,7 +210,7 @@ class SSH:
             processed_cmd = cmd
         return head_path_info, processed_cmd
 
-    def exec_run(self, cmd: str) -> CmdRecord:
+    def exec_run(self, cmd: str) -> CmdRecord[str]:
         """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n
         ```python
         remote_config = RemoteConfig(
@@ -230,7 +230,7 @@ class SSH:
         """
         head_path_info, processed_cmd = self._path_process(cmd)
 
-        record = CmdRecord(
+        record = CmdRecord[str](
             cmd,
             f"[{self.name}]{head_path_info} $",
         )
@@ -250,7 +250,7 @@ class SSH:
         record.record_end()
         return record
 
-    def _long_running_task(self, cmd: str, record: CmdRecording):
+    def _long_running_task(self, cmd: str, record: CmdRecording[str]):
         record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
 
         while not record.stop_event.is_set():
@@ -271,10 +271,10 @@ class SSH:
             # DBGexit_status()
             # Term.putsln(f"[{record.id}] task end")
 
-    def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording:
+    def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording[str]:
         head_path_info, processed_cmd = self._path_process(cmd)
 
-        record = CmdRecording(
+        record = CmdRecording[str](
             cmd,
             f"[{self.name}]{head_path_info} $",
         )
@@ -325,7 +325,7 @@ class Channel:
         )
         self.shell = ssh.remote.invoke_shell()
         self.prompt_complie = re.compile(prompt_pattern)
-        self.cmds: list[CmdRecord] = []
+        self.cmds: list[CmdRecord[str]] = []
 
         # 处理初始化通道时产生的默认输出，并获终端取提示符
         string = ""
@@ -369,7 +369,7 @@ class Channel:
         self.name = name
         self.meta_record.name = name
 
-    def run(self, cmd: str) -> CmdRecord:
+    def run(self, cmd: str) -> CmdRecord[str]:
         """执行命令，使用正则匹配终端提示符判断是否结束"""
         # bug fix 速度过快会有遗留输出
         if self.shell.recv_ready():
@@ -382,7 +382,7 @@ class Channel:
         f_prompt_received = False  # 是否匹配终端提示符
         # res = ""  # 有效输出
 
-        record = CmdRecord(cmd, f"[{self.name}]{self.prompt_now}")
+        record = CmdRecord[str](cmd, f"[{self.name}]{self.prompt_now}")
         self.cmds.append(record)
         record.start_time, _ = Term.putsln(record.get_fmt_prompt())
         self.shell.send(
@@ -430,19 +430,19 @@ class Channel:
         return record
 
     @overload
-    def run_lines(self, cmds: list[str]) -> list[CmdRecord]:
+    def run_lines(self, cmds: list[str]) -> list[CmdRecord[str]]:
         """执行多行命令，返回命令记录列表"""
         ...
 
     @overload
-    def run_lines(self, cmds: str) -> list[CmdRecord]:
+    def run_lines(self, cmds: str) -> list[CmdRecord[str]]:
         """执行多行命令，输入是带有换行符的字符串
 
         如果无换行符，会调用self.run执行单行命令，统一返回list[CmdRecord]
         """
         ...
 
-    def run_lines(self, cmds: Union[list[str], str]) -> list[CmdRecord]:
+    def run_lines(self, cmds: Union[list[str], str]) -> list[CmdRecord[str]]:
         if isinstance(cmds, list):
             return [self.run(cmd) for cmd in cmds]
         elif isinstance(cmds, str):
@@ -538,7 +538,7 @@ class SFTP:
     #     return Channel(self.aty_ssh, *args, **kwargs)
 
     def listdir(self, path: str = ".") -> CmdRecord[str]:
-        record = CmdRecord(
+        record = CmdRecord[str](
             cmd=f"listdir {path}",
             prompt=self.prompt,
         )
@@ -551,7 +551,7 @@ class SFTP:
         return record
 
     def listdir_attr(self, path: str = ".") -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"listdir_attr {path}",
             prompt=self.prompt,
         )
@@ -567,7 +567,7 @@ class SFTP:
     def listdir_iter(
         self, path: bytes | str = ".", read_aheads: int = 50
     ) -> CmdRecord[Iterator[SFTPAttributes]]:
-        record = CmdRecord(
+        record = CmdRecord[Iterator[SFTPAttributes]](
             cmd=f"listdir_iter {path}",
             prompt=self.prompt,
         )
@@ -582,7 +582,7 @@ class SFTP:
     def open(
         self, filename: bytes | str, mode: str = "r", bufsize: int = -1
     ) -> CmdRecord[SFTPFile]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPFile](
             cmd=f"open {filename} {mode} {bufsize}",
             prompt=self.prompt,
         )
@@ -594,7 +594,7 @@ class SFTP:
         return record
 
     def remove(self, path: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"remove {path}",
             prompt=self.prompt,
         )
@@ -605,7 +605,7 @@ class SFTP:
         return record
 
     def rename(self, oldpath: bytes | str, newpath: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"rename {oldpath} {newpath}",
             prompt=self.prompt,
         )
@@ -618,7 +618,7 @@ class SFTP:
     def posix_rename(
         self, oldpath: bytes | str, newpath: bytes | str
     ) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"posix_rename {oldpath} {newpath}",
             prompt=self.prompt,
         )
@@ -629,7 +629,7 @@ class SFTP:
         return record
 
     def mkdir(self, path: bytes | str, mode: int = 0o777) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"mkdir {path} {mode}",
             prompt=self.prompt,
         )
@@ -640,7 +640,7 @@ class SFTP:
         return record
 
     def rmdir(self, path: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"rmdir {path}",
             prompt=self.prompt,
         )
@@ -651,7 +651,7 @@ class SFTP:
         return record
 
     def stat(self, path: bytes | str) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"stat {path}",
             prompt=self.prompt,
         )
@@ -663,7 +663,7 @@ class SFTP:
         return record
 
     def lstat(self, path: bytes | str) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"lstat {path}",
             prompt=self.prompt,
         )
@@ -675,7 +675,7 @@ class SFTP:
         return record
 
     def symlink(self, source: bytes | str, dest: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"symlink {source} {dest}",
             prompt=self.prompt,
         )
@@ -686,7 +686,7 @@ class SFTP:
         return record
 
     def chmod(self, path: bytes | str, mode: int) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"chmod {path} {mode}",
             prompt=self.prompt,
         )
@@ -697,7 +697,7 @@ class SFTP:
         return record
 
     def chown(self, path: bytes | str, uid: int, gid: int) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"chown {path} {uid} {gid}",
             prompt=self.prompt,
         )
@@ -710,7 +710,7 @@ class SFTP:
     def utime(
         self, path: bytes | str, times: tuple[float, float] | None
     ) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"utime {path} {times}",
             prompt=self.prompt,
         )
@@ -721,7 +721,7 @@ class SFTP:
         return record
 
     def truncate(self, path: bytes | str, size: int) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"truncate {path} {size}",
             prompt=self.prompt,
         )
@@ -732,7 +732,7 @@ class SFTP:
         return record
 
     def readlink(self, path: bytes | str) -> CmdRecord[str | None]:
-        record = CmdRecord(
+        record = CmdRecord[str | None](
             cmd=f"readlink {path}",
             prompt=self.prompt,
         )
@@ -744,7 +744,7 @@ class SFTP:
         return record
 
     def normalize(self, path: bytes | str) -> CmdRecord[str]:
-        record = CmdRecord(
+        record = CmdRecord[str](
             cmd=f"normalize {path}",
             prompt=self.prompt,
         )
@@ -756,7 +756,7 @@ class SFTP:
         return record
 
     def chdir(self, path: None | bytes | str = None) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"chdir {path}",
             prompt=self.prompt,
         )
@@ -767,14 +767,16 @@ class SFTP:
         return record
 
     def getcwd(self) -> CmdRecord[str | None]:
-        record = CmdRecord(
+        record = CmdRecord[str | None](
             cmd="getcwd",
             prompt=self.prompt,
         )
         Term.putsln(record.get_fmt_prompt())
         self.cmds.append(record)
         res = self.sftp.getcwd()
-        record.result.append(Term.putsln(str(res)))
+        Term.putsln(str(res))
+        record.result_append(res)
+
         record.record_end()
         return record
 
@@ -786,7 +788,7 @@ class SFTP:
         callback: _Callback | None = None,
         confirm: bool = True,
     ) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"putfo {remotepath}",
             prompt=self.prompt,
         )
@@ -804,15 +806,16 @@ class SFTP:
         callback: _Callback | None = None,
         confirm: bool = True,
     ) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"put {localpath} {remotepath}",
             prompt=self.prompt,
         )
         Term.putsln(record.get_fmt_prompt())
         self.cmds.append(record)
         res = self.sftp.put(localpath, remotepath, callback, confirm)
+        Term.putsln(str(res))
+        record.result_append(res)
         record.record_end()
-        record.result.append(Term.putsln(str(res)))
         return record
 
     def getfo(
@@ -823,7 +826,7 @@ class SFTP:
         prefetch: bool = True,
         max_concurrent_prefetch_requests: int | None = None,
     ) -> CmdRecord[int]:
-        record = CmdRecord(
+        record = CmdRecord[int](
             cmd=f"getfo {remotepath}",
             prompt=self.prompt,
         )
@@ -832,8 +835,9 @@ class SFTP:
         res = self.sftp.getfo(
             remotepath, fl, callback, prefetch, max_concurrent_prefetch_requests
         )
+        t, _ = Term.putsln(str(res))
         record.record_end()
-        record.result.append(Term.putsln(str(res)))
+        record.result_append(res, t)
         return record
 
     def get(
@@ -844,7 +848,7 @@ class SFTP:
         prefetch: bool = True,
         max_concurrent_prefetch_requests: int | None = None,
     ) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"get {remotepath} {localpath}",
             prompt=self.prompt,
         )

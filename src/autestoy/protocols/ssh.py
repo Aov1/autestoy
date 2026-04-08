@@ -8,7 +8,7 @@ import threading as td
 import time
 import warnings
 from os import PathLike
-from typing import IO, Callable, Iterator, Self, TypeAlias, Union, overload
+from typing import IO, Callable, Iterable, Iterator, Self, TypeAlias, Union, overload
 
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes
@@ -93,7 +93,9 @@ class SSH:
                     f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.ip}] TimeOut!"
                 )
             else:
-                warnings.warn(f"Failed to connect to {self.remote_config.name}: TimeOut!")
+                warnings.warn(
+                    f"Failed to connect to {self.remote_config.name}: TimeOut!"
+                )
         # check connect
         if self.is_connected():
             self.meta_record.logs.append(
@@ -152,10 +154,21 @@ class SSH:
         )
 
     def create_channel(
-        self, name: str | None = None, insert_cmd: str | None = None
+        self,
+        name: str | None = None,
+        prompt_pattern: str | None = None,
+        show_welcome_info: bool = False,
+        insert_cmd: str | None = None,
     ) -> Channel:
         """创建ssh通道，用作交互式终端"""
-        tmp = Channel(self, name=name, insert_cmd=insert_cmd)
+
+        tmp = Channel(
+            self,
+            name=name,
+            prompt_pattern=prompt_pattern,
+            show_welcome_info=show_welcome_info,
+            insert_cmd=insert_cmd,
+        )
         self.channels.append(tmp)
         return tmp
 
@@ -234,7 +247,7 @@ class SSH:
         ```
         实现方式为exec_command方法，每次执行都相当于开启一个新的通道，因此没有上下文保持（例如cd到新的路径后，在下一个exec_run中又进入到默认路径)
 
-        SSH类实现了with_path和set_global_path方法，用于exec_run设置临时路径和全局路径
+        SSH类实现了with_path、set_global_path和cd方法，用于exec_run设置临时路径和全局路径
         """
         head_path_info, processed_cmd = self._path_process(cmd)
 
@@ -280,6 +293,7 @@ class SSH:
             # Term.putsln(f"[{record.id}] task end")
 
     def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording[str]:
+        """多线程执行，对于命令创建一个线程，不会阻塞主线程执行"""
         head_path_info, processed_cmd = self._path_process(cmd)
 
         record = CmdRecording[str](
@@ -298,7 +312,41 @@ class SSH:
         # task.join()
         return record
 
+    @overload
+    def long_running_list(self, *cmd: str) -> list[CmdRecording[str]]:
+        """eg:\n
+        ```python
+        dut = SSH(conf(...))
+        dut.long_running_list('cmd1','cmd2','cmd3',...)
+        ```
+        """
+        ...
+
+    @overload
+    def long_running_list(self, *cmd: Iterable) -> list[CmdRecording[str]]:
+        """eg:\n
+        ```python
+        dut = SSH(conf(...))
+        dut.long_running_list(['cmd1','cmd2','cmd3',...])
+        dut.long_running_list(('cmd1','cmd2','cmd3',...))
+        cmds = iter(cmd_iterable)
+        dut.long_running_list(cmds)
+
+        ```
+        """
+        ...
+
+    def long_running_list(self, *cmds: str | Iterable) -> list[CmdRecording[str]]:
+        """同时初始化并运行多个多线程命令"""
+        res = []
+        if len(cmds) == 1 and isinstance(cmds[0], Iterable):
+            cmds = tuple(cmds[0])
+        for e in cmds:
+            res.append(self.long_running(e))
+        return res
+
     def create_ftp(self) -> SFTP:
+        """创建sftp"""
         sftp = SFTP(self)
         self.sftp.append(sftp)
         return sftp
@@ -321,7 +369,7 @@ class Channel:
         self,
         ssh: SSH,
         name: str | None = None,
-        prompt_pattern: str = prompt_pattern_default,
+        prompt_pattern: str | None = None,
         show_welcome_info: bool = False,
         insert_cmd: str | None = None,
     ):
@@ -332,6 +380,9 @@ class Channel:
             type="Channel", name=self.name, info=ssh.meta_record.info
         )
         self.shell = ssh.remote.invoke_shell()
+        prompt_pattern = (
+            Channel.prompt_pattern_default if prompt_pattern is None else prompt_pattern
+        )
         self.prompt_complie = re.compile(prompt_pattern)
         self.cmds: list[CmdRecord[str]] = []
 
@@ -343,7 +394,7 @@ class Channel:
         tmp_timestamp = time.time()
         tmp_timeout = 3
         tmp_f_switched_bash = False
-        while True:
+        while True:  # 显示有bug，未测试
             if self.shell.recv_ready():
                 welcome_info = self.shell.recv(65535).decode()
                 string += welcome_info
@@ -357,8 +408,10 @@ class Channel:
             time.sleep(0.01)
             if time.time() - tmp_timestamp > tmp_timeout and not tmp_f_switched_bash:
                 self.shell.send(bytes("bash\n", "utf-8"))
-                Term.puts_msg(
-                    f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                self.meta_record.logs.append(
+                    Term.puts_msg(
+                        f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                    )
                 )
                 tmp_f_switched_bash = True
                 # print()

@@ -10,7 +10,7 @@ from typing import Generic, Iterator, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
-from ..export.term import TermStyle
+from ..export.term import Term, TermStyle
 from ..tools.result import Result, T
 from ..tools.timestamp import Timestamp
 from .ansi import AnsiReset, remove_ansi
@@ -168,12 +168,28 @@ class CmdRecording(CmdRecord, Generic[T]):
         self.fifo = queue.Queue()  # 用于主线程实时处理线程输出
         self.stop_event = td.Event()  # 用于停止线程的事件
         self.long_running_task: td.Thread  # 记录任务本身，便于获取状态
+        self.pid: int | None = None
 
     @override
     def __contains__(self, string: str) -> bool:
         """支持 if string in record: 的语法，每次对于fifo进行判断，消耗fifo"""
         line = self.get_once()
         return True if line and string in line else False
+
+    def is_task_alive(self) -> bool:
+        """判断线程任务是否还在运行"""
+        return self.long_running_task.is_alive()
+
+    def task_start(self) -> None:
+        """启动线程任务"""
+        if not self.is_task_alive():
+            t, _ = Term.putsln(self.get_fmt_prompt())
+            self.start_time = t
+            self.long_running_task.start()
+
+    def task_join(self) -> None:
+        """等待线程任务结束"""
+        self.long_running_task.join()
 
     @override
     def task_kill(self):

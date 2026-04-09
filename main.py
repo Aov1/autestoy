@@ -33,7 +33,9 @@
 #     main()
 
 
-from autestoy import SSH, RemoteConfig
+from pprint import pprint
+
+from autestoy import SSH, RemoteConfig, ulog
 
 pad_conf = RemoteConfig(
     user="u0_a210",
@@ -43,3 +45,18 @@ pad_conf = RemoteConfig(
 ).set_name("Huawei Matepad")
 
 dut = SSH(pad_conf)
+dut.kill(3956)
+ch = dut.create_channel()
+ch.run("echo $$")
+ulog(ch._get_channel_pid())
+res = ch._command("""
+ls
+ls
+ls
+pwd
+pwd
+pwd
+""")
+
+pprint(res)
+ulog(ch._command("echo $$"))

@@ -405,6 +405,14 @@ class SSH:
         self.sftp.append(sftp)
         return sftp
 
+    def kill(self, pid: int | CmdRecording) -> CmdRecord[str]:
+        """杀死指定进程"""
+        if isinstance(pid, CmdRecording):
+            if pid.pid is None:
+                raise ValueError("pid is None")
+            pid = pid.pid
+        return self.exec_run(f"kill -9 {pid}")
+
 
 @collect(CollectType.Channel, CollectObj)
 class Channel:
@@ -486,7 +494,6 @@ class Channel:
 
     def run(self, cmd: str) -> CmdRecord[str]:
         """执行命令，使用正则匹配终端提示符判断是否结束"""
-        # bug fix 速度过快会有遗留输出
         if self.shell.recv_ready():
             self.shell.recv(65535)
         buf = b""  # 处理缓冲区
@@ -574,16 +581,49 @@ class Channel:
                 res.extend([self.run(cmd) for cmd in each])
         return res
 
-    def _get_exit_code(self):
+    def _get_exit_code(self) -> int:
         """获取上一条命令的退出码，退出码获取一次后清除\n
         运行echo $?实现，内部调用"""
+
+        res = self._command("echo $?")[0]
+        if isinstance(res, str) and res.isdigit():
+            return int(res)
+        else:
+            raise ValueError(f"_get_exit_code: {res} is not a string")
+
+    def _get_recv_buf(self) -> bytes | None:
+        if self.shell.recv_ready():
+            return self.shell.recv(65535)
+
+    def _get_channel_pid(self) -> int:
+        """获取Channel的pid\n
+        运行echo $$实现，内部调用"""
+        res = self._command("echo $$")[0]
+        if isinstance(res, str) and res.isdigit():
+            return int(res)
+        else:
+            raise ValueError(f"_get_channel_pid: {res} is not a string")
+
+    def _command(self, cmd: str) -> list[str] | list[list[str]]:
+        """Channel 执行命令并返回结果，不显示在记录中，不在终端输出。\n
+        可以拆分多行命令，支持自动除去空行\n
+        对于单个命令，返回输出列表:\n
+        `['line1','line2',...]`\n
+        对于多个命令，返回每个命令输出列表组成的列表:\n
+        `[['cmd1_line1','cmd1_line2',...],['cmd2_line1','cmd2_line2',...],...]`"""
+        res = []
+        cmd_list = cmd.splitlines()
+        cmd_list = [e.strip() for e in cmd_list if e.strip() != ""]
+        # print(f"dbg:{cmd_list = }")
+        if len(cmd_list) != 1:
+            for e in cmd_list:
+                res.append(self._command(e))
+            return res
         self._get_recv_buf()
-        self.shell.send(b"echo $?\r\n")
+        self.shell.send(bytes(cmd_list[0] + "\r\n", "utf-8"))
         buf = b""
         got_cmd = False
-        got_code = False
         got_end = False
-        code = None
         while True:
             if self.shell.recv_ready():
                 buf += self.shell.recv(65535)
@@ -591,13 +631,8 @@ class Channel:
                 while b"\n" in buf:
                     line_b, buf = buf.split(b"\n", 1)
                     line = line_b.decode().strip().replace("\r", "")
-                    if "echo $?" in remove_ansi(line):
+                    if cmd_list[0] in remove_ansi(line):
                         got_cmd = True
-                        continue
-
-                    if got_cmd and not got_code:
-                        code = int(remove_ansi(line))
-                        got_code = True
                         continue
 
                     if self.prompt_complie.search(
@@ -608,14 +643,13 @@ class Channel:
                         )  # 更新命令行提示符
                         got_end = True  # 命令行提示符处理完成标志置位
                         break
+                    if got_cmd:
+                        res.append(remove_ansi(line))
+                        # print(f"{line = }")
+
             if got_end:
                 break
-        if got_code and got_cmd and got_end and code is not None:
-            return code
-
-    def _get_recv_buf(self) -> bytes | None:
-        if self.shell.recv_ready():
-            return self.shell.recv(65535)
+        return res
 
 
 @collect(CollectType.SFTP, CollectObj)

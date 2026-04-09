@@ -8,7 +8,7 @@ import threading as td
 import time
 import warnings
 from os import PathLike
-from typing import IO, Callable, Iterable, Iterator, Self, TypeAlias, Union, overload
+from typing import IO, Callable, Iterable, Iterator, Self, TypeAlias, overload
 
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes
@@ -87,7 +87,7 @@ class SSH:
         # try connect
         try:
             self._connect()
-        except Exception as e:
+        except Exception as _:
             if raise_when_timeout:
                 raise TimeoutError(
                     f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.ip}] TimeOut!"
@@ -271,6 +271,19 @@ class SSH:
         record.record_end()
         return record
 
+    def exec_run_lines(self, *cmds: str | Iterable[str]) -> list[CmdRecord[str]]:
+        """顺序执行多行命令，返回结果列表"""
+        res: list[CmdRecord[str]] = []
+        for each in cmds:
+            if isinstance(each, str):
+                cmd_list = [e.strip() for e in each.splitlines() if e.strip() != ""]
+                for cmd in cmd_list:
+                    res.append(self.exec_run(cmd))
+            elif isinstance(each, Iterable):
+                for e in each:
+                    res.append(self.exec_run(e))
+        return res
+
     def _long_running_task(self, cmd: str, record: CmdRecording[str]):
         record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
 
@@ -323,7 +336,7 @@ class SSH:
         ...
 
     @overload
-    def long_running_list(self, *cmd: Iterable) -> list[CmdRecording[str]]:
+    def long_running_list(self, *cmd: Iterable[str]) -> list[CmdRecording[str]]:
         """eg:\n
         ```python
         dut = SSH(conf(...))
@@ -336,13 +349,15 @@ class SSH:
         """
         ...
 
-    def long_running_list(self, *cmds: str | Iterable) -> list[CmdRecording[str]]:
+    def long_running_list(self, *cmds: str | Iterable[str]) -> list[CmdRecording[str]]:
         """同时初始化并运行多个多线程命令"""
-        res = []
-        if len(cmds) == 1 and isinstance(cmds[0], Iterable):
-            cmds = tuple(cmds[0])
-        for e in cmds:
-            res.append(self.long_running(e))
+        res: list[CmdRecording[str]] = []
+        for each in cmds:
+            if isinstance(each, Iterable):
+                for e in each:
+                    res.append(self.long_running(e))
+            else:
+                res.append(self.long_running(each))
         return res
 
     def create_ftp(self) -> SFTP:
@@ -491,31 +506,34 @@ class Channel:
         return record
 
     @overload
-    def run_lines(self, cmds: list[str]) -> list[CmdRecord[str]]:
-        """执行多行命令，返回命令记录列表"""
-        ...
-
-    @overload
-    def run_lines(self, cmds: str) -> list[CmdRecord[str]]:
+    def run_lines(self, *cmds: str) -> list[CmdRecord[str]]:
         """执行多行命令，输入是带有换行符的字符串
 
         如果无换行符，会调用self.run执行单行命令，统一返回list[CmdRecord]
         """
         ...
 
-    def run_lines(self, cmds: Union[list[str], str]) -> list[CmdRecord[str]]:
-        if isinstance(cmds, list):
-            return [self.run(cmd) for cmd in cmds]
-        elif isinstance(cmds, str):
-            if "\n" in cmds or "\r\n" in cmds:
-                # 转换多行字符串命令为列表
-                cmd_list = cmds.replace("\r\n", "\n").split("\n")
-                # 去除空行
-                cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
-                # 递归调用run_lines
-                return self.run_lines(cmd_list)
-            else:  # 命令只有一行，统一列表返回格式
-                return [self.run(cmds)]
+    @overload
+    def run_lines(self, *cmds: Iterable[str]) -> list[CmdRecord[str]]:
+        """执行多行命令，返回命令记录列表"""
+        ...
+
+    def run_lines(self, *cmds: Iterable[str] | str) -> list[CmdRecord[str]]:
+        res: list[CmdRecord[str]] = []
+        for each in cmds:
+            if isinstance(each, str):
+                if "\n" in each or "\r\n" in each:
+                    # 转换多行字符串命令为列表
+                    cmd_list = each.replace("\r\n", "\n").split("\n")
+                    # 去除空行
+                    cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
+                    # 递归调用run_lines
+                    res.extend(self.run_lines(cmd_list))
+                else:  # 命令只有一行，统一列表返回格式
+                    res.append(self.run(each))
+            elif isinstance(each, Iterable):
+                res.extend([self.run(cmd) for cmd in each])
+        return res
 
     def _get_exit_code(self):
         """获取上一条命令的退出码，退出码获取一次后清除\n

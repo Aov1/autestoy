@@ -167,3 +167,18 @@ def test_Channel_get_exit_code(ssh: SSH):
     assert res.exit_code == 0
     res = ch.run("abcdeefefe")
     assert res.exit_code == 127
+
+
+def test_SSH_exec_run_lines(ssh: SSH):
+    log("test_SSH_exec_run_lines")
+    cmds = """
+    ls
+    cd project
+    ls
+    cd autestoy_sim
+    ls
+    pwd
+    ps
+    ps -aux
+    """
+    res = ssh.exec_run_lines(cmds)

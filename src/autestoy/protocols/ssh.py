@@ -221,18 +221,18 @@ class SSH:
         返回类维护的路径以及添加了cd命令的cmd"""
         head_path_info = ""
         if self.temp_path:
-            processed_cmd = f"cd {self.temp_path} && {cmd}"
+            processed_cmd = f"cd {self.temp_path} && exec {cmd}"
             head_path_info = self.temp_path
             self.temp_path = None
         elif self.global_path:
-            processed_cmd = f"cd {self.global_path} && {cmd}"
+            processed_cmd = f"cd {self.global_path} && exec {cmd}"
             head_path_info = self.global_path
         else:
-            processed_cmd = cmd
+            processed_cmd = "exec " + cmd
         return head_path_info, processed_cmd
 
     def exec_run(self, cmd: str) -> CmdRecord[str]:
-        """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n
+        """执行命令，返回输出信息记录类CmdRecord\n
         ```python
         remote_config = RemoteConfig(
             user="user",
@@ -281,16 +281,23 @@ class SSH:
                     res.append(self.exec_run(cmd))
             elif isinstance(each, Iterable):
                 for e in each:
-                    res.append(self.exec_run(e))
+                    res.append(self.exec_run(e.strip())) if e.strip() != "" else None
         return res
 
     def _long_running_task(self, cmd: str, record: CmdRecording[str]):
         record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
+        # get pid
+        while not record.stop_event.is_set() and not stdout.channel.exit_status_ready():
+            first_line = stdout.readline().strip()
+            if first_line.isdigit():
+                record.pid = int(first_line)
+                break
 
-        while not record.stop_event.is_set():
+        while not record.stop_event.is_set() and not stdout.channel.exit_status_ready():
+            # print(stdout.channel.exit_status_ready())
             line = stdout.readline()
             if line != "":
-                line = line.strip()
+                line = line.rstrip()
                 record.result.append(
                     Term.putsln(
                         line,
@@ -300,15 +307,32 @@ class SSH:
                 record.fifo.put(line)
             time.sleep(0.005)
         else:
+            while True:
+                line = stdout.readline()
+                if line == "":
+                    break
+                line = line.rstrip()
+                record.result.append(
+                    Term.putsln(
+                        line,
+                        insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                    )
+                )
+                record.fifo.put(line)
             record.record_end()
             record.exit_code = stdout.channel.recv_exit_status()
             # DBGexit_status()
             # Term.putsln(f"[{record.id}] task end")
 
-    def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording[str]:
-        """多线程执行，对于命令创建一个线程，不会阻塞主线程执行"""
+    def long_running(self, cmd: str, start_task: bool = True) -> CmdRecording[str]:
+        """多线程执行，对于命令创建一个线程，不会阻塞主线程执行\n
+        默认立即执行线程，可以通过设置start_task来控制是否立即执行\n
+        不立即执行后需要通过CmdRecording.task_start()或.long_running_task.start()方法开始执行\n
+        通过CmdRecording.task_join()或.long_running_task.join()方法等待线程执行完毕\n
+        通过CmdRecording.task_kill()方法终止线程\n
+        其他需要操作Thread类的方法请通过CmdRecording.long_running_task属性获取"""
         head_path_info, processed_cmd = self._path_process(cmd)
-
+        processed_cmd = "echo $$ && " + processed_cmd  # 获取远程服务器的进程pid
         record = CmdRecording[str](
             cmd,
             f"[{self.name}]{head_path_info} $",
@@ -319,24 +343,33 @@ class SSH:
         task.daemon = True
         record.long_running_task = task
         # record.start_time = time.time()  # record start time
-        Term.putsln(record.get_fmt_prompt())
-        task.start()
-        time.sleep(wait_time)
+        if start_task:
+            Term.putsln(record.get_fmt_prompt())
+            task.start()
+
+        # time.sleep(wait_time)
         # task.join()
         return record
 
     @overload
-    def long_running_list(self, *cmd: str) -> list[CmdRecording[str]]:
-        """eg:\n
+    def long_running_list(
+        self, *cmd: str, start_task: bool = True
+    ) -> list[CmdRecording[str]]:
+        """对于long_running方法的包装，\n
+        eg:\n
         ```python
         dut = SSH(conf(...))
         dut.long_running_list('cmd1','cmd2','cmd3',...)
+        cmds_string = '''cmd1\\ncmd2\\ncmd3\\ncmd4'''
+        dut.long_running_list(cmds_string)
         ```
         """
         ...
 
     @overload
-    def long_running_list(self, *cmd: Iterable[str]) -> list[CmdRecording[str]]:
+    def long_running_list(
+        self, *cmd: Iterable[str], start_task: bool = True
+    ) -> list[CmdRecording[str]]:
         """eg:\n
         ```python
         dut = SSH(conf(...))
@@ -349,15 +382,21 @@ class SSH:
         """
         ...
 
-    def long_running_list(self, *cmds: str | Iterable[str]) -> list[CmdRecording[str]]:
-        """同时初始化并运行多个多线程命令"""
+    def long_running_list(
+        self, *cmds: str | Iterable[str], start_task: bool = True
+    ) -> list[CmdRecording[str]]:
+        """同时初始化并运行多个多线程命令，start_task 控制是否启动任务"""
         res: list[CmdRecording[str]] = []
         for each in cmds:
-            if isinstance(each, Iterable):
+            if isinstance(each, str):
+                cmds_list = [e.strip() for e in each.splitlines() if e.strip() != ""]
+                for cmd in cmds_list:
+                    res.append(self.long_running(cmd, start_task))
+            elif isinstance(each, Iterable):
                 for e in each:
-                    res.append(self.long_running(e))
+                    res.append(self.long_running(e, start_task))
             else:
-                res.append(self.long_running(each))
+                raise TypeError(f"Unsupported type: {type(each)}")
         return res
 
     def create_ftp(self) -> SFTP:

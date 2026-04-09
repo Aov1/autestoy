@@ -44,19 +44,23 @@ pad_conf = RemoteConfig(
     port=8022,
 ).set_name("Huawei Matepad")
 
-dut = SSH(pad_conf)
-dut.kill(3956)
-ch = dut.create_channel()
-ch.run("echo $$")
-ulog(ch._get_channel_pid())
-res = ch._command("""
-ls
-ls
-ls
-pwd
-pwd
-pwd
-""")
+# dut = SSH(pad_conf)
+# dut.kill(3956)
+# ch = dut.create_channel()
+# ch.run("echo $$")
+# ulog(ch._get_channel_pid())
+# res = ch._command("""
+# ls
+# ls
+# ls
+# pwd
+# pwd
+# pwd
+# """)
 
-pprint(res)
-ulog(ch._command("echo $$"))
+# pprint(res)
+# ulog(ch._command("echo $$"))
+
+import sqlite3 as sql
+
+conn = sql.connect("")

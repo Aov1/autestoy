@@ -581,6 +581,9 @@ class Channel:
                 res.extend([self.run(cmd) for cmd in each])
         return res
 
+    # def running(self,cmd:str)->CmdRecording[str]: # 无意义，基于channel的前台运行会占用通道，后台运行会混合输出，管理困难
+    # pass
+
     def _get_exit_code(self) -> int:
         """获取上一条命令的退出码，退出码获取一次后清除\n
         运行echo $?实现，内部调用"""

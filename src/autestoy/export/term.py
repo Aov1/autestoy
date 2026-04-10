@@ -2,6 +2,7 @@
 关于终端输出
 """
 
+import shutil
 import sys
 
 # from autestoy.tools.record import CmdRecord
@@ -12,11 +13,15 @@ from ..tools.timestamp import Timestamp
 sys_write = sys.stdout.write
 
 
+def get_terminal_size() -> tuple[int, int]:
+    return shutil.get_terminal_size()
+
+
 class TermStyle:
     timestamp_font_color = AnsiColor.blue
     timestamp_background_color = AnsiColor.none
     relative_timestamp_bits = 3
-    relative_timestamp_width = 10
+    relative_timestamp_width = 13
 
     msg_font_color = AnsiColor.none
     msg_background_color = AnsiColor.none
@@ -37,6 +42,8 @@ class TermStyle:
 class Term:
     sw_timestamp: bool = True
     sw_absolute_timestamp: bool = False
+
+    terminal_size: tuple[int, int] = get_terminal_size()
 
     @classmethod
     def set_time_base(cls, time_base: Timestamp):
@@ -103,3 +110,11 @@ class Term:
         )
         sys_write(f"{background_color}{font_color}{msg}{AnsiReset}\n")
         return log_time, Result(remove_ansi(msg))
+
+    @classmethod
+    def is_terminal_size_changed(cls) -> bool:
+        tmp_new_size = get_terminal_size()
+        if tmp_new_size != cls.terminal_size:
+            cls.terminal_size = tmp_new_size
+            return True
+        return False

@@ -260,6 +260,12 @@ class SSH:
         record.stdin, stdout, _stderr = self.remote.exec_command(
             processed_cmd, get_pty=True
         )
+        # 当终端宽度改变时重新计算宽度
+        if Term.is_terminal_size_changed():
+            timestamp_width = len(Term.fmt_timestamp())
+            record.stdin.channel.resize_pty(
+                Term.terminal_size[0] - timestamp_width, Term.terminal_size[1]
+            )
         while not stdout.channel.exit_status_ready():
             line = stdout.readline()
             if line.strip() != "":
@@ -295,6 +301,12 @@ class SSH:
 
     def _long_running_task(self, cmd: str, record: CmdRecording[str]):
         record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
+        # 当终端宽度改变时重新计算宽度
+        if Term.is_terminal_size_changed():
+            timestamp_width = len(Term.fmt_timestamp())
+            record.stdin.channel.resize_pty(
+                Term.terminal_size[0] - timestamp_width, Term.terminal_size[1]
+            )
         # get pid
         while not record.stop_event.is_set() and not stdout.channel.exit_status_ready():
             first_line = stdout.readline().strip()
@@ -500,6 +512,7 @@ class Channel:
             Term.putsln(f"{self.meta_record.get_fmt_prompt()} Created")
         )
         self.pid = self._get_channel_pid()
+        self._resize_pty()
 
     def set_name(self, name: str):
         """设置通道名称"""
@@ -673,6 +686,14 @@ class Channel:
             if got_end:
                 break
         return res
+
+    def _resize_pty(self):
+        # 当终端宽度改变时重新计算宽度
+        if Term.is_terminal_size_changed():
+            timestamp_width = len(Term.fmt_timestamp())
+            self.shell.resize_pty(
+                Term.terminal_size[0] - timestamp_width, Term.terminal_size[1]
+            )
 
 
 @collect(CollectType.SFTP, CollectObj)

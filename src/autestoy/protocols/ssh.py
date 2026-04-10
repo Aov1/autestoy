@@ -276,7 +276,11 @@ class SSH:
         res: list[CmdRecord[str]] = []
         for each in cmds:
             if isinstance(each, str):
-                cmd_list = [e.strip() for e in each.splitlines() if e.strip() != ""]
+                cmd_list = [
+                    e.strip()
+                    for e in each.splitlines()
+                    if e.strip() != "" and not e.strip().startswith("#")
+                ]
                 for cmd in cmd_list:
                     res.append(self.exec_run(cmd))
             elif isinstance(each, Iterable):
@@ -389,7 +393,11 @@ class SSH:
         res: list[CmdRecording[str]] = []
         for each in cmds:
             if isinstance(each, str):
-                cmds_list = [e.strip() for e in each.splitlines() if e.strip() != ""]
+                cmds_list = [
+                    e.strip()
+                    for e in each.splitlines()
+                    if e.strip() != "" and not e.strip().startswith("#")
+                ]
                 for cmd in cmds_list:
                     res.append(self.long_running(cmd, start_task))
             elif isinstance(each, Iterable):
@@ -572,8 +580,14 @@ class Channel:
                 if "\n" in each or "\r\n" in each:
                     # 转换多行字符串命令为列表
                     cmd_list = each.replace("\r\n", "\n").split("\n")
+                    # 去除只包含注释的行和空行
+                    cmd_list = [
+                        cmd.strip()
+                        for cmd in cmd_list
+                        if not cmd.strip().startswith("#") and cmd.strip() != ""
+                    ]
                     # 去除空行
-                    cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
+                    # cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
                     # 递归调用run_lines
                     res.extend(self.run_lines(cmd_list))
                 else:  # 命令只有一行，统一列表返回格式

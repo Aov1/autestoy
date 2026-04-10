@@ -486,6 +486,7 @@ class Channel:
         self.meta_record.logs.append(
             Term.putsln(f"{self.meta_record.get_fmt_prompt()} Created")
         )
+        self.pid = self._get_channel_pid()
 
     def set_name(self, name: str):
         """设置通道名称"""

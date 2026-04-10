@@ -10,7 +10,7 @@ from typing import Generic, Iterator, override
 
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
-from ..export.term import TermStyle
+from ..export.term import Term, TermStyle
 from ..tools.result import Result, T
 from ..tools.timestamp import Timestamp
 from .ansi import AnsiReset, remove_ansi
@@ -168,12 +168,28 @@ class CmdRecording(CmdRecord, Generic[T]):
         self.fifo = queue.Queue()  # 用于主线程实时处理线程输出
         self.stop_event = td.Event()  # 用于停止线程的事件
         self.long_running_task: td.Thread  # 记录任务本身，便于获取状态
+        self.pid: int | None = None
 
     @override
     def __contains__(self, string: str) -> bool:
         """支持 if string in record: 的语法，每次对于fifo进行判断，消耗fifo"""
         line = self.get_once()
         return True if line and string in line else False
+
+    def is_task_alive(self) -> bool:
+        """判断线程任务是否还在运行"""
+        return self.long_running_task.is_alive()
+
+    def task_start(self) -> None:
+        """启动线程任务"""
+        if not self.is_task_alive():
+            t, _ = Term.putsln(self.get_fmt_prompt())
+            self.start_time = t
+            self.long_running_task.start()
+
+    def task_join(self) -> None:
+        """等待线程任务结束"""
+        self.long_running_task.join()
 
     @override
     def task_kill(self):
@@ -231,7 +247,7 @@ class CmdRecording(CmdRecord, Generic[T]):
         """查找一次fifo中的数据，消耗fifo\n
         当fifo为空时返回None\n
         fifo非空时进行正则匹配，返回 输出行 和 匹配结果列表\n
-        匹配失败时返回的是 输出行 和 空列表"""
+        匹配失败时返回的是 输出行 和 空列pattern表"""
         line = self.get_once()
         if line is None:
             return None
@@ -239,25 +255,26 @@ class CmdRecording(CmdRecord, Generic[T]):
 
     def fifo_wait(
         self, re_string: str | None = None, timeout: float = 10
-    ) -> None | list[str]:
+    ) -> tuple[list[str], bool]:
         """等待fifo中有指定的数据，返回截至找到指定字符串之前的所有fifo line，当然消耗fifo\n
-        re_string:需要正则匹配的字符串，为None时匹配任何字符\n
-        timeout设置超时，非0启用，超时返回None；timeout=0不启用超时\n"""
+        re_string:需要正则匹配的字符串，为None时匹配任何字符，匹配返回获取的fifo列表和True\n
+        timeout设置超时，非0启用，超时返回fifo内容列表和False\n
+        timeout=0不启用超时，可能死循环\n"""
         lines: list[str] = []  # 存储获取的fifo line
         t_start = time.time()  # 开始时间
         while True:
             line = self.get_once()  # 获取一次fifo line
             if line is None:  # fifo为空
                 if timeout != 0 and time.time() - t_start > timeout:  # 是否超时
-                    return None  # 超时结束
+                    return lines, False  # 超时结束
                 continue  # 未超时继续
             lines.append(line)  # fifo line 非空保存
 
             if re_string is None:  # 未设置匹配字符串立即结束
-                return lines
+                return lines, True
             else:  # 设置了匹配字符串
                 if re.search(re_string, line):  # 进行匹配
-                    return lines  # 匹配到立即返回
+                    return lines, True  # 匹配到立即返回
 
 
 class MetaRecord(Generic[T]):

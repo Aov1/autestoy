@@ -4,8 +4,9 @@ from pprint import pprint
 
 from conftest import log
 
-from autestoy.export.term import Term, ulog
+from autestoy.export.term import Term
 from autestoy.protocols.ssh import SSH, Channel, RemoteConfig
+from autestoy.tools.control import ulog
 from autestoy.tools.record import CmdRecord
 
 
@@ -51,14 +52,20 @@ def test_Channel(ssh: SSH):
 def test_SSH_long_running(ssh: SSH):
     log("test_SSH_long_running")
     ssh.set_global_path("/data/data/com.termux/files/home/project/autestoy_sim")
+    ssh.exec_run_lines(
+        "rm -rf log.txt",
+        "touch log.txt",
+    )
     infer_cmd = ssh.long_running("python infer_log.py")
     tail_cmd = ssh.long_running("tail -f ./log.txt")
 
     st_time = time.time()
     while time.time() - st_time < 10:
-        if not tail_cmd.fifo.empty() and "line:10" in tail_cmd.fifo.get():
+        if not tail_cmd.fifo.empty() and "line:20" in tail_cmd.fifo.get():
             break
 
+    ulog(f"{infer_cmd.pid = }")
+    ulog(f"{tail_cmd.pid = }")
     infer_cmd.task_kill()
     tail_cmd.task_kill()
 
@@ -156,3 +163,57 @@ def test_exec_run(ssh: SSH):
     Term.sw_timestamp = False
     ssh.exec_run("ls")
     ssh.with_path("project/autestoy_sim").exec_run("python t10s.py")
+
+    Term.sw_absolute_timestamp = False
+    Term.sw_timestamp = True
+
+
+def test_Channel_get_exit_code(ssh: SSH):
+    ch = ssh.create_channel()
+    res = ch.run("ls")
+    assert res.exit_code == 0
+    res = ch.run("pwd")
+    assert res.exit_code == 0
+    res = ch.run("abcdeefefe")
+    assert res.exit_code == 127
+
+
+def test_SSH_exec_run_lines(ssh: SSH):
+    log("test_SSH_exec_run_lines")
+    cmds = """
+    ls
+    cd project
+    ls
+    cd autestoy_sim
+    ls
+    pwd
+    ps
+    ps -aux
+    """
+    res = ssh.exec_run_lines(cmds)
+    assert isinstance(res, list)
+    for r in res:
+        assert isinstance(r, CmdRecord)
+
+
+def test_SSH_long_running_list(ssh: SSH):
+    log("test_SSH_long_running_list")
+    res = ssh.long_running_list("""
+        ls
+        pwd
+        ps
+        ps -aux
+    """)
+    list(map(lambda r: r.task_start(), res))
+    list(map(lambda r: r.task_join(), res))
+
+    for e in res:
+        print(e.get_result())
+    # res = ssh.long_running('')
+    # res.long_running_task.join()
+
+
+def test_Channel_get_pid(ssh: SSH):
+    ch = ssh.create_channel()
+    pid = ch._get_channel_pid()
+    assert pid == ch.pid

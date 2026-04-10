@@ -4,6 +4,7 @@
 
 import sys
 
+# from autestoy.tools.record import CmdRecord
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.result import Result
 from ..tools.timestamp import Timestamp
@@ -102,20 +103,3 @@ class Term:
         )
         sys_write(f"{background_color}{font_color}{msg}{AnsiReset}\n")
         return log_time, Result(remove_ansi(msg))
-
-
-print()
-
-
-def ulog(
-    *msg: object,
-    override_font_color: str | None = None,
-    override_background_color: str | None = None,
-) -> tuple[Timestamp, Result[str]]:
-    """用户Log，终端输出，带有时间戳"""
-    long_msg = " ".join(str(m) for m in msg)
-    return Term.putsln(
-        long_msg,
-        set_font_color=override_font_color,
-        set_background_color=override_background_color,
-    )

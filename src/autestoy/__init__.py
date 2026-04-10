@@ -1,6 +1,7 @@
 from .export.term import Term, TermStyle
 from .protocols.ssh import SSH, CollectObj, RemoteConfig
 from .tools.ansi import AnsiBackground, AnsiColor, AnsiReset, AnsiStyle
+from .tools.control import ulog
 from .tools.record import CmdRecord
 from .tools.timestamp import Timestamp
 
@@ -9,6 +10,7 @@ __all__ = [
     # export/term.py
     "Term",
     "TermStyle",
+    "ulog",
     # protocols/ssh.py
     "SSH",
     "CollectObj",

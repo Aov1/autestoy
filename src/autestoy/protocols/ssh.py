@@ -8,7 +8,7 @@ import threading as td
 import time
 import warnings
 from os import PathLike
-from typing import IO, Callable, Iterator, Self, TypeAlias, Union, overload
+from typing import IO, Callable, Iterable, Iterator, Self, TypeAlias, overload
 
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes
@@ -56,7 +56,10 @@ class SSH:
     """SSH协议类，用于连接远程主机"""
 
     def __init__(
-        self, remote_config: RemoteConfig, timeout: float | None = None
+        self,
+        remote_config: RemoteConfig,
+        timeout: float | None = None,
+        raise_when_timeout: bool = True,
     ) -> None:
         # class create reocrd
         self.remote_config: RemoteConfig = remote_config
@@ -75,7 +78,7 @@ class SSH:
         self.timeout: None | float = timeout
         # sub record
         self.channels: list[Channel] = []  # 记录子通道
-        self.cmds: list[CmdRecord] = []  # 记录运行的命令
+        self.cmds: list[CmdRecord[str]] = []  # 记录运行的命令
         self.sftp: list[SFTP] = []  # 记录开启的SFTP服务
         # path config
         self.global_path: str | None = None
@@ -84,8 +87,15 @@ class SSH:
         # try connect
         try:
             self._connect()
-        except Exception as e:
-            warnings.warn(f"Failed to connect to {self.remote_config.name}: {e}")
+        except Exception as _:
+            if raise_when_timeout:
+                raise TimeoutError(
+                    f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.ip}] TimeOut!"
+                )
+            else:
+                warnings.warn(
+                    f"Failed to connect to {self.remote_config.name}: TimeOut!"
+                )
         # check connect
         if self.is_connected():
             self.meta_record.logs.append(
@@ -144,10 +154,21 @@ class SSH:
         )
 
     def create_channel(
-        self, name: str | None = None, insert_cmd: str | None = None
+        self,
+        name: str | None = None,
+        prompt_pattern: str | None = None,
+        show_welcome_info: bool = False,
+        insert_cmd: str | None = None,
     ) -> Channel:
         """创建ssh通道，用作交互式终端"""
-        tmp = Channel(self, name=name, insert_cmd=insert_cmd)
+
+        tmp = Channel(
+            self,
+            name=name,
+            prompt_pattern=prompt_pattern,
+            show_welcome_info=show_welcome_info,
+            insert_cmd=insert_cmd,
+        )
         self.channels.append(tmp)
         return tmp
 
@@ -169,14 +190,14 @@ class SSH:
         self.temp_path = path
         return self
 
-    def cd(self, path: str) -> CmdRecord:
+    def cd(self, path: str) -> CmdRecord[str]:
         """改变当前路径，作用于global_path，但是受到with_path方法维护的temp_path的影响\n
         当temp_path非空执行cd后清除temp_path，优先级高于global_path\n
         不管被哪个路径影响，最后根据运行返回的路径覆盖global_path。\n
         路径错误或不存在不会对gloabl_path赋值。
         """
         head_path_info, _ = self._path_process("")
-        record = CmdRecord(
+        record = CmdRecord[str](
             f"cd {path}",
             f"[{self.name}]{head_path_info} $",
         )
@@ -200,18 +221,18 @@ class SSH:
         返回类维护的路径以及添加了cd命令的cmd"""
         head_path_info = ""
         if self.temp_path:
-            processed_cmd = f"cd {self.temp_path} && {cmd}"
+            processed_cmd = f"cd {self.temp_path} && exec {cmd}"
             head_path_info = self.temp_path
             self.temp_path = None
         elif self.global_path:
-            processed_cmd = f"cd {self.global_path} && {cmd}"
+            processed_cmd = f"cd {self.global_path} && exec {cmd}"
             head_path_info = self.global_path
         else:
-            processed_cmd = cmd
+            processed_cmd = "exec " + cmd
         return head_path_info, processed_cmd
 
-    def exec_run(self, cmd: str) -> CmdRecord:
-        """exec_run_bata，执行命令，返回输出信息记录类CmdRecord\n
+    def exec_run(self, cmd: str) -> CmdRecord[str]:
+        """执行命令，返回输出信息记录类CmdRecord\n
         ```python
         remote_config = RemoteConfig(
             user="user",
@@ -226,11 +247,11 @@ class SSH:
         ```
         实现方式为exec_command方法，每次执行都相当于开启一个新的通道，因此没有上下文保持（例如cd到新的路径后，在下一个exec_run中又进入到默认路径)
 
-        SSH类实现了with_path和set_global_path方法，用于exec_run设置临时路径和全局路径
+        SSH类实现了with_path、set_global_path和cd方法，用于exec_run设置临时路径和全局路径
         """
         head_path_info, processed_cmd = self._path_process(cmd)
 
-        record = CmdRecord(
+        record = CmdRecord[str](
             cmd,
             f"[{self.name}]{head_path_info} $",
         )
@@ -240,23 +261,52 @@ class SSH:
             processed_cmd, get_pty=True
         )
         while not stdout.channel.exit_status_ready():
-            if (tmp_out := stdout.readline().strip()) != "":
-                record.result.append(Term.putsln(tmp_out))
+            line = stdout.readline()
+            if line.strip() != "":
+                record.result.append(Term.putsln(line.rstrip()))
             time.sleep(0.01)
         else:
-            if (tmp_out := stdout.readline().strip()) != "":
-                record.result.append(Term.putsln(tmp_out))
+            while True:
+                line = stdout.readline()
+                if line.strip() != "":
+                    record.result.append(Term.putsln(line.rstrip()))
+                else:
+                    break
             record.exit_code = stdout.channel.recv_exit_status()
         record.record_end()
         return record
 
-    def _long_running_task(self, cmd: str, record: CmdRecording):
-        record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
+    def exec_run_lines(self, *cmds: str | Iterable[str]) -> list[CmdRecord[str]]:
+        """顺序执行多行命令，返回结果列表"""
+        res: list[CmdRecord[str]] = []
+        for each in cmds:
+            if isinstance(each, str):
+                cmd_list = [
+                    e.strip()
+                    for e in each.splitlines()
+                    if e.strip() != "" and not e.strip().startswith("#")
+                ]
+                for cmd in cmd_list:
+                    res.append(self.exec_run(cmd))
+            elif isinstance(each, Iterable):
+                for e in each:
+                    res.append(self.exec_run(e.strip())) if e.strip() != "" else None
+        return res
 
-        while not record.stop_event.is_set():
+    def _long_running_task(self, cmd: str, record: CmdRecording[str]):
+        record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
+        # get pid
+        while not record.stop_event.is_set() and not stdout.channel.exit_status_ready():
+            first_line = stdout.readline().strip()
+            if first_line.isdigit():
+                record.pid = int(first_line)
+                break
+
+        while not record.stop_event.is_set() and not stdout.channel.exit_status_ready():
+            # print(stdout.channel.exit_status_ready())
             line = stdout.readline()
             if line != "":
-                line = line.strip()
+                line = line.rstrip()
                 record.result.append(
                     Term.putsln(
                         line,
@@ -266,15 +316,33 @@ class SSH:
                 record.fifo.put(line)
             time.sleep(0.005)
         else:
+            while True:
+                line = stdout.readline()
+                if line == "":
+                    break
+                line = line.rstrip()
+                record.result.append(
+                    Term.putsln(
+                        line,
+                        insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                    )
+                )
+                record.fifo.put(line)
             record.record_end()
             record.exit_code = stdout.channel.recv_exit_status()
             # DBGexit_status()
             # Term.putsln(f"[{record.id}] task end")
 
-    def long_running(self, cmd: str, wait_time: float = 0.5) -> CmdRecording:
+    def long_running(self, cmd: str, start_task: bool = True) -> CmdRecording[str]:
+        """多线程执行，对于命令创建一个线程，不会阻塞主线程执行\n
+        默认立即执行线程，可以通过设置start_task来控制是否立即执行\n
+        不立即执行后需要通过CmdRecording.task_start()或.long_running_task.start()方法开始执行\n
+        通过CmdRecording.task_join()或.long_running_task.join()方法等待线程执行完毕\n
+        通过CmdRecording.task_kill()方法终止线程\n
+        其他需要操作Thread类的方法请通过CmdRecording.long_running_task属性获取"""
         head_path_info, processed_cmd = self._path_process(cmd)
-
-        record = CmdRecording(
+        processed_cmd = "echo $$ && " + processed_cmd  # 获取远程服务器的进程pid
+        record = CmdRecording[str](
             cmd,
             f"[{self.name}]{head_path_info} $",
         )
@@ -284,16 +352,79 @@ class SSH:
         task.daemon = True
         record.long_running_task = task
         # record.start_time = time.time()  # record start time
-        Term.putsln(record.get_fmt_prompt())
-        task.start()
-        time.sleep(wait_time)
+        if start_task:
+            Term.putsln(record.get_fmt_prompt())
+            task.start()
+
+        # time.sleep(wait_time)
         # task.join()
         return record
 
+    @overload
+    def long_running_list(
+        self, *cmd: str, start_task: bool = True
+    ) -> list[CmdRecording[str]]:
+        """对于long_running方法的包装，\n
+        eg:\n
+        ```python
+        dut = SSH(conf(...))
+        dut.long_running_list('cmd1','cmd2','cmd3',...)
+        cmds_string = '''cmd1\\ncmd2\\ncmd3\\ncmd4'''
+        dut.long_running_list(cmds_string)
+        ```
+        """
+        ...
+
+    @overload
+    def long_running_list(
+        self, *cmd: Iterable[str], start_task: bool = True
+    ) -> list[CmdRecording[str]]:
+        """eg:\n
+        ```python
+        dut = SSH(conf(...))
+        dut.long_running_list(['cmd1','cmd2','cmd3',...])
+        dut.long_running_list(('cmd1','cmd2','cmd3',...))
+        cmds = iter(cmd_iterable)
+        dut.long_running_list(cmds)
+
+        ```
+        """
+        ...
+
+    def long_running_list(
+        self, *cmds: str | Iterable[str], start_task: bool = True
+    ) -> list[CmdRecording[str]]:
+        """同时初始化并运行多个多线程命令，start_task 控制是否启动任务"""
+        res: list[CmdRecording[str]] = []
+        for each in cmds:
+            if isinstance(each, str):
+                cmds_list = [
+                    e.strip()
+                    for e in each.splitlines()
+                    if e.strip() != "" and not e.strip().startswith("#")
+                ]
+                for cmd in cmds_list:
+                    res.append(self.long_running(cmd, start_task))
+            elif isinstance(each, Iterable):
+                for e in each:
+                    res.append(self.long_running(e, start_task))
+            else:
+                raise TypeError(f"Unsupported type: {type(each)}")
+        return res
+
     def create_ftp(self) -> SFTP:
+        """创建sftp"""
         sftp = SFTP(self)
         self.sftp.append(sftp)
         return sftp
+
+    def kill(self, pid: int | CmdRecording) -> CmdRecord[str]:
+        """杀死指定进程"""
+        if isinstance(pid, CmdRecording):
+            if pid.pid is None:
+                raise ValueError("pid is None")
+            pid = pid.pid
+        return self.exec_run(f"kill -9 {pid}")
 
 
 @collect(CollectType.Channel, CollectObj)
@@ -313,7 +444,7 @@ class Channel:
         self,
         ssh: SSH,
         name: str | None = None,
-        prompt_pattern: str = prompt_pattern_default,
+        prompt_pattern: str | None = None,
         show_welcome_info: bool = False,
         insert_cmd: str | None = None,
     ):
@@ -324,8 +455,11 @@ class Channel:
             type="Channel", name=self.name, info=ssh.meta_record.info
         )
         self.shell = ssh.remote.invoke_shell()
+        prompt_pattern = (
+            Channel.prompt_pattern_default if prompt_pattern is None else prompt_pattern
+        )
         self.prompt_complie = re.compile(prompt_pattern)
-        self.cmds: list[CmdRecord] = []
+        self.cmds: list[CmdRecord[str]] = []
 
         # 处理初始化通道时产生的默认输出，并获终端取提示符
         string = ""
@@ -335,7 +469,7 @@ class Channel:
         tmp_timestamp = time.time()
         tmp_timeout = 3
         tmp_f_switched_bash = False
-        while True:
+        while True:  # 显示有bug，未测试
             if self.shell.recv_ready():
                 welcome_info = self.shell.recv(65535).decode()
                 string += welcome_info
@@ -349,8 +483,10 @@ class Channel:
             time.sleep(0.01)
             if time.time() - tmp_timestamp > tmp_timeout and not tmp_f_switched_bash:
                 self.shell.send(bytes("bash\n", "utf-8"))
-                Term.puts_msg(
-                    f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                self.meta_record.logs.append(
+                    Term.puts_msg(
+                        f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                    )
                 )
                 tmp_f_switched_bash = True
                 # print()
@@ -363,15 +499,15 @@ class Channel:
         self.meta_record.logs.append(
             Term.putsln(f"{self.meta_record.get_fmt_prompt()} Created")
         )
+        self.pid = self._get_channel_pid()
 
     def set_name(self, name: str):
         """设置通道名称"""
         self.name = name
         self.meta_record.name = name
 
-    def run(self, cmd: str) -> CmdRecord:
+    def run(self, cmd: str) -> CmdRecord[str]:
         """执行命令，使用正则匹配终端提示符判断是否结束"""
-        # bug fix 速度过快会有遗留输出
         if self.shell.recv_ready():
             self.shell.recv(65535)
         buf = b""  # 处理缓冲区
@@ -382,7 +518,7 @@ class Channel:
         f_prompt_received = False  # 是否匹配终端提示符
         # res = ""  # 有效输出
 
-        record = CmdRecord(cmd, f"[{self.name}]{self.prompt_now}")
+        record = CmdRecord[str](cmd, f"[{self.name}]{self.prompt_now}")
         self.cmds.append(record)
         record.start_time, _ = Term.putsln(record.get_fmt_prompt())
         self.shell.send(
@@ -397,7 +533,7 @@ class Channel:
                 while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
                     buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
                     line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
-                    line = line_b.decode().strip().replace("\r", "")
+                    line = line_b.decode().rstrip().replace("\r", "")
 
                     if (
                         len(cmd_lines) == 0 and not f_cmd_lines_skip
@@ -424,35 +560,119 @@ class Channel:
                     break
 
             time.sleep(0.005)
+
         record.record_end()
+        record.exit_code = self._get_exit_code()
         return record
 
     @overload
-    def run_lines(self, cmds: list[str]) -> list[CmdRecord]:
-        """执行多行命令，返回命令记录列表"""
-        ...
-
-    @overload
-    def run_lines(self, cmds: str) -> list[CmdRecord]:
+    def run_lines(self, *cmds: str) -> list[CmdRecord[str]]:
         """执行多行命令，输入是带有换行符的字符串
 
         如果无换行符，会调用self.run执行单行命令，统一返回list[CmdRecord]
         """
         ...
 
-    def run_lines(self, cmds: Union[list[str], str]) -> list[CmdRecord]:
-        if isinstance(cmds, list):
-            return [self.run(cmd) for cmd in cmds]
-        elif isinstance(cmds, str):
-            if "\n" in cmds or "\r\n" in cmds:
-                # 转换多行字符串命令为列表
-                cmd_list = cmds.replace("\r\n", "\n").split("\n")
-                # 去除空行
-                cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
-                # 递归调用run_lines
-                return self.run_lines(cmd_list)
-            else:  # 命令只有一行，统一列表返回格式
-                return [self.run(cmds)]
+    @overload
+    def run_lines(self, *cmds: Iterable[str]) -> list[CmdRecord[str]]:
+        """执行多行命令，返回命令记录列表"""
+        ...
+
+    def run_lines(self, *cmds: Iterable[str] | str) -> list[CmdRecord[str]]:
+        res: list[CmdRecord[str]] = []
+        for each in cmds:
+            if isinstance(each, str):
+                if "\n" in each or "\r\n" in each:
+                    # 转换多行字符串命令为列表
+                    cmd_list = each.replace("\r\n", "\n").split("\n")
+                    # 去除只包含注释的行和空行
+                    cmd_list = [
+                        cmd.strip()
+                        for cmd in cmd_list
+                        if not cmd.strip().startswith("#") and cmd.strip() != ""
+                    ]
+                    # 去除空行
+                    # cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
+                    # 递归调用run_lines
+                    res.extend(self.run_lines(cmd_list))
+                else:  # 命令只有一行，统一列表返回格式
+                    res.append(self.run(each))
+            elif isinstance(each, Iterable):
+                res.extend([self.run(cmd) for cmd in each])
+        return res
+
+    # def running(self,cmd:str)->CmdRecording[str]: # 无意义，基于channel的前台运行会占用通道，后台运行会混合输出，管理困难
+    # pass
+
+    def _get_exit_code(self) -> int:
+        """获取上一条命令的退出码，退出码获取一次后清除\n
+        运行echo $?实现，内部调用"""
+
+        res = self._command("echo $?")[0]
+        if isinstance(res, str) and res.isdigit():
+            return int(res)
+        else:
+            raise ValueError(f"_get_exit_code: {res} is not a string")
+
+    def _get_recv_buf(self) -> bytes | None:
+        if self.shell.recv_ready():
+            return self.shell.recv(65535)
+
+    def _get_channel_pid(self) -> int:
+        """获取Channel的pid\n
+        运行echo $$实现，内部调用"""
+        res = self._command("echo $$")[0]
+        if isinstance(res, str) and res.isdigit():
+            return int(res)
+        else:
+            raise ValueError(f"_get_channel_pid: {res} is not a string")
+
+    def _command(self, cmd: str) -> list[str] | list[list[str]]:
+        """Channel 执行命令并返回结果，不显示在记录中，不在终端输出。\n
+        可以拆分多行命令，支持自动除去空行\n
+        对于单个命令，返回输出列表:\n
+        `['line1','line2',...]`\n
+        对于多个命令，返回每个命令输出列表组成的列表:\n
+        `[['cmd1_line1','cmd1_line2',...],['cmd2_line1','cmd2_line2',...],...]`"""
+        res = []
+        cmd_list = cmd.splitlines()
+        cmd_list = [e.strip() for e in cmd_list if e.strip() != ""]
+        # print(f"dbg:{cmd_list = }")
+        if len(cmd_list) != 1:
+            for e in cmd_list:
+                res.append(self._command(e))
+            return res
+        self._get_recv_buf()
+        self.shell.send(bytes(cmd_list[0] + "\r\n", "utf-8"))
+        buf = b""
+        got_cmd = False
+        got_end = False
+        while True:
+            if self.shell.recv_ready():
+                buf += self.shell.recv(65535)
+                buf = buf.replace(b"\r\n", b"\n")
+                while b"\n" in buf:
+                    line_b, buf = buf.split(b"\n", 1)
+                    line = line_b.decode().strip().replace("\r", "")
+                    if cmd_list[0] in remove_ansi(line):
+                        got_cmd = True
+                        continue
+
+                    if self.prompt_complie.search(
+                        remove_ansi(line)
+                    ):  # 当前行与命令行提示符匹配
+                        self.prompt_now = remove_ansi(line).strip(
+                            "\r\n "
+                        )  # 更新命令行提示符
+                        got_end = True  # 命令行提示符处理完成标志置位
+                        break
+                    if got_cmd:
+                        res.append(remove_ansi(line))
+                        # print(f"{line = }")
+
+            if got_end:
+                break
+        return res
 
 
 @collect(CollectType.SFTP, CollectObj)
@@ -493,7 +713,7 @@ class SFTP:
     #     return Channel(self.aty_ssh, *args, **kwargs)
 
     def listdir(self, path: str = ".") -> CmdRecord[str]:
-        record = CmdRecord(
+        record = CmdRecord[str](
             cmd=f"listdir {path}",
             prompt=self.prompt,
         )
@@ -506,7 +726,7 @@ class SFTP:
         return record
 
     def listdir_attr(self, path: str = ".") -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"listdir_attr {path}",
             prompt=self.prompt,
         )
@@ -522,7 +742,7 @@ class SFTP:
     def listdir_iter(
         self, path: bytes | str = ".", read_aheads: int = 50
     ) -> CmdRecord[Iterator[SFTPAttributes]]:
-        record = CmdRecord(
+        record = CmdRecord[Iterator[SFTPAttributes]](
             cmd=f"listdir_iter {path}",
             prompt=self.prompt,
         )
@@ -537,7 +757,7 @@ class SFTP:
     def open(
         self, filename: bytes | str, mode: str = "r", bufsize: int = -1
     ) -> CmdRecord[SFTPFile]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPFile](
             cmd=f"open {filename} {mode} {bufsize}",
             prompt=self.prompt,
         )
@@ -549,7 +769,7 @@ class SFTP:
         return record
 
     def remove(self, path: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"remove {path}",
             prompt=self.prompt,
         )
@@ -560,7 +780,7 @@ class SFTP:
         return record
 
     def rename(self, oldpath: bytes | str, newpath: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"rename {oldpath} {newpath}",
             prompt=self.prompt,
         )
@@ -573,7 +793,7 @@ class SFTP:
     def posix_rename(
         self, oldpath: bytes | str, newpath: bytes | str
     ) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"posix_rename {oldpath} {newpath}",
             prompt=self.prompt,
         )
@@ -584,7 +804,7 @@ class SFTP:
         return record
 
     def mkdir(self, path: bytes | str, mode: int = 0o777) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"mkdir {path} {mode}",
             prompt=self.prompt,
         )
@@ -595,7 +815,7 @@ class SFTP:
         return record
 
     def rmdir(self, path: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"rmdir {path}",
             prompt=self.prompt,
         )
@@ -606,7 +826,7 @@ class SFTP:
         return record
 
     def stat(self, path: bytes | str) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"stat {path}",
             prompt=self.prompt,
         )
@@ -618,7 +838,7 @@ class SFTP:
         return record
 
     def lstat(self, path: bytes | str) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"lstat {path}",
             prompt=self.prompt,
         )
@@ -630,7 +850,7 @@ class SFTP:
         return record
 
     def symlink(self, source: bytes | str, dest: bytes | str) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"symlink {source} {dest}",
             prompt=self.prompt,
         )
@@ -641,7 +861,7 @@ class SFTP:
         return record
 
     def chmod(self, path: bytes | str, mode: int) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"chmod {path} {mode}",
             prompt=self.prompt,
         )
@@ -652,7 +872,7 @@ class SFTP:
         return record
 
     def chown(self, path: bytes | str, uid: int, gid: int) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"chown {path} {uid} {gid}",
             prompt=self.prompt,
         )
@@ -665,7 +885,7 @@ class SFTP:
     def utime(
         self, path: bytes | str, times: tuple[float, float] | None
     ) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"utime {path} {times}",
             prompt=self.prompt,
         )
@@ -676,7 +896,7 @@ class SFTP:
         return record
 
     def truncate(self, path: bytes | str, size: int) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"truncate {path} {size}",
             prompt=self.prompt,
         )
@@ -687,7 +907,7 @@ class SFTP:
         return record
 
     def readlink(self, path: bytes | str) -> CmdRecord[str | None]:
-        record = CmdRecord(
+        record = CmdRecord[str | None](
             cmd=f"readlink {path}",
             prompt=self.prompt,
         )
@@ -699,7 +919,7 @@ class SFTP:
         return record
 
     def normalize(self, path: bytes | str) -> CmdRecord[str]:
-        record = CmdRecord(
+        record = CmdRecord[str](
             cmd=f"normalize {path}",
             prompt=self.prompt,
         )
@@ -711,7 +931,7 @@ class SFTP:
         return record
 
     def chdir(self, path: None | bytes | str = None) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"chdir {path}",
             prompt=self.prompt,
         )
@@ -722,14 +942,16 @@ class SFTP:
         return record
 
     def getcwd(self) -> CmdRecord[str | None]:
-        record = CmdRecord(
+        record = CmdRecord[str | None](
             cmd="getcwd",
             prompt=self.prompt,
         )
         Term.putsln(record.get_fmt_prompt())
         self.cmds.append(record)
         res = self.sftp.getcwd()
-        record.result.append(Term.putsln(str(res)))
+        Term.putsln(str(res))
+        record.result_append(res)
+
         record.record_end()
         return record
 
@@ -741,7 +963,7 @@ class SFTP:
         callback: _Callback | None = None,
         confirm: bool = True,
     ) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"putfo {remotepath}",
             prompt=self.prompt,
         )
@@ -759,15 +981,16 @@ class SFTP:
         callback: _Callback | None = None,
         confirm: bool = True,
     ) -> CmdRecord[SFTPAttributes]:
-        record = CmdRecord(
+        record = CmdRecord[SFTPAttributes](
             cmd=f"put {localpath} {remotepath}",
             prompt=self.prompt,
         )
         Term.putsln(record.get_fmt_prompt())
         self.cmds.append(record)
         res = self.sftp.put(localpath, remotepath, callback, confirm)
+        Term.putsln(str(res))
+        record.result_append(res)
         record.record_end()
-        record.result.append(Term.putsln(str(res)))
         return record
 
     def getfo(
@@ -778,7 +1001,7 @@ class SFTP:
         prefetch: bool = True,
         max_concurrent_prefetch_requests: int | None = None,
     ) -> CmdRecord[int]:
-        record = CmdRecord(
+        record = CmdRecord[int](
             cmd=f"getfo {remotepath}",
             prompt=self.prompt,
         )
@@ -787,8 +1010,9 @@ class SFTP:
         res = self.sftp.getfo(
             remotepath, fl, callback, prefetch, max_concurrent_prefetch_requests
         )
+        t, _ = Term.putsln(str(res))
         record.record_end()
-        record.result.append(Term.putsln(str(res)))
+        record.result_append(res, t)
         return record
 
     def get(
@@ -799,7 +1023,7 @@ class SFTP:
         prefetch: bool = True,
         max_concurrent_prefetch_requests: int | None = None,
     ) -> CmdRecord[None]:
-        record = CmdRecord(
+        record = CmdRecord[None](
             cmd=f"get {remotepath} {localpath}",
             prompt=self.prompt,
         )

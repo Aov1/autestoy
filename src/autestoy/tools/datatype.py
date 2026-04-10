@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Iterable, overload
+from typing import Iterable, Literal, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -174,8 +174,126 @@ def str2int(value: str) -> tuple[int, int]:
     return gwidth, gvalue
 
 
+def width_in_base(width: int, base: Literal[2, 8, 10, 16]) -> int:
+    """计算在特定进制下需显示需要的宽度"""
+    if base == 2:
+        return width
+    elif base == 8:
+        return (width + 2) // 3
+    elif base == 10:
+        return len(str(max_value(width)))
+    elif base == 16:
+        return (width + 3) // 4
+    else:
+        raise ValueError(f"{base = } not in [2,8,10,16]")
+
+
+def insert_every_n(string: str, n: int, sep: str) -> str:
+    """将字符串分成 n 长度的片段，插入分隔字符"""
+    parts = [string[::-1][i : i + n] for i in range(0, len(string), n)]
+    return sep.join(parts)[::-1]
+
+
+def fmt_in_base(
+    value: int,  # 数据
+    width: int,  # 宽度
+    base: Literal[2, 8, 10, 16],  # 进制 2 8 10 16
+    digit_separator: str,  # 分隔副
+    digits_per_group: int,  # 每组宽度
+    verilog_like: bool = False,  # 默认使用 非 verilog 风格
+    upper_base: bool = False,  # 默认小写进制字符
+    upper_hex_digits: bool = True,  # 默认大写十六进制字符
+) -> str:
+    """将整数格式化为指定进制的字符串表示。基本供类内部使用\n
+    参数:\n
+    ```
+    - value             : 要格式化的整数
+    - width             : 输出宽度
+    - base              : 进制，2 8 10 16 之一
+    - digit_separator   : 分隔符
+    - digits_per_group  : 每组宽度
+    - verilog_like      : 是否使用 verilog 风格
+    - upper_base        : 是否使用大写进制字符
+    - upper_hex_digits  : 是否使用大写十六进制字符
+    ```
+    """
+    UB = upper_base
+    if base == 2:
+        if verilog_like:
+            return f"{width}'{'B' if UB else 'b'}{insert_every_n(bin(value)[2:].zfill(width_in_base(width, 2)), digits_per_group, digit_separator)}"
+        else:
+            return f"0{'B' if UB else 'b'}{insert_every_n(bin(value)[2:].zfill(width_in_base(width, 2)), digits_per_group, digit_separator)}"
+    elif base == 8:
+        if verilog_like:
+            return f"{width}'{'O' if UB else 'o'}{insert_every_n(oct(value)[2:].zfill(width_in_base(width, 8)), digits_per_group, digit_separator)}"
+        else:
+            return f"0{'O' if UB else 'o'}{insert_every_n(oct(value)[2:].zfill(width_in_base(width, 8)), digits_per_group, digit_separator)}"
+    elif base == 10:
+        if verilog_like:
+            return f"{width}'{'D' if UB else 'd'}{insert_every_n(str(value).zfill(width_in_base(width, 10)), digits_per_group, digit_separator)}"
+        else:
+            return f"{insert_every_n(str(value).zfill(width_in_base(width, 10)), digits_per_group, digit_separator)}"
+    elif base == 16:
+        if verilog_like:
+            head = f"{width}'{'H' if UB else 'h'}"
+            digit = f"{insert_every_n(hex(value)[2:].zfill(width_in_base(width, 16)), digits_per_group, digit_separator)}"
+            digit = digit.upper() if upper_hex_digits else digit
+            return f"{head}{digit}"
+        else:
+            head = f"0{'X' if UB else 'x'}"
+            digit = f"{insert_every_n(hex(value)[2:].zfill(width_in_base(width, 16)), digits_per_group, digit_separator)}"
+            digit = digit.upper() if upper_hex_digits else digit
+            return f"{head}{digit}"
+    else:
+        raise ValueError(f"{base = } not in [2,8,10,16]")
+
+
 class Bits:
-    _display_4bits_in_line = 16
+    _one_line_max_width = 64
+    _to_str_type: Literal[2, 8, 10, 16] = 16
+    _digit_separator_width_in_base_2: int = 4
+    _digit_separator_width_in_base_8: int = 3
+    _digit_separator_width_in_base_10: int = 4
+    _digit_separator_width_in_base_16: int = 4
+    _digit_separator_type: str = "_"
+    _verilog_like_type: bool = False
+    _upper_base_symbol: bool = False
+    _upper_hex_digits: bool = True
+
+    @classmethod
+    def set_verilog_like(cls, verilog_like: bool) -> None:
+        cls._verilog_like_type = verilog_like
+
+    @classmethod
+    def set_digit_separator(
+        cls,
+        digit_separator: str,
+        width_in_base_2: int = 4,
+        width_in_base_8: int = 3,
+        width_in_base_10: int = 4,
+        width_in_base_16: int = 4,
+    ) -> None:
+        cls._digit_separator_type = digit_separator
+        cls._digit_separator_width_in_base_2 = width_in_base_2
+        cls._digit_separator_width_in_base_8 = width_in_base_8
+        cls._digit_separator_width_in_base_10 = width_in_base_10
+        cls._digit_separator_width_in_base_16 = width_in_base_16
+
+    @classmethod
+    def set_upper_base_symbol(cls, upper_base_symbol: bool) -> None:
+        cls._upper_base_symbol = upper_base_symbol
+
+    @classmethod
+    def set_upper_hex_digits(cls, upper_hex_digits: bool) -> None:
+        cls._upper_hex_digits = upper_hex_digits
+
+    @classmethod
+    def set_str_type(cls, to_str_type: Literal[2, 8, 10, 16]) -> None:
+        cls._to_str_type = to_str_type
+
+    @classmethod
+    def set_one_line_max_width(cls, one_line_max_width: int) -> None:
+        cls._one_line_max_width = one_line_max_width
 
     @overload
     def __init__(self, value: int, width: int) -> None:
@@ -223,36 +341,36 @@ class Bits:
     def __init__(
         self, value: int | str | Bits | Iterable, width: int | None = None
     ) -> None:
-        self.width: int
-        self.value: int
+        self._width: int
+        self._value: int
 
         # value:int && width:int
         if isinstance(value, int) and isinstance(width, int):
             if value < 0 or width <= 0:
                 raise ValueError(f"Invalid negative integer: {value} or {width}")
-            self.width = width
-            self.value = value & ((1 << width) - 1)
+            self._width = width
+            self._value = value & ((1 << width) - 1)
         elif isinstance(value, str):
             gwidth, gvalue = str2int(value)
             # value:str && width:None
             if gwidth != 0 and width is None:
-                self.width = abs(gwidth)
-                self.value = gvalue
+                self._width = abs(gwidth)
+                self._value = gvalue
             # value:str && width:int
             elif gwidth == 0 and isinstance(width, int) and width > 0:
-                self.width = width
-                self.value = gvalue & ((1 << self.width) - 1)
+                self._width = width
+                self._value = gvalue & ((1 << self._width) - 1)
             elif gwidth != 0 and isinstance(width, int) and width > 0:
-                self.width = width
-                self.value = gvalue & ((1 << self.width) - 1)
+                self._width = width
+                self._value = gvalue & ((1 << self._width) - 1)
             else:
                 raise ValueError(f"Invalid value: {value} match {width}")
         elif isinstance(value, Bits) and width is None:
-            self.value = value.value
-            self.width = value.width
+            self._value = value._value
+            self._width = value._width
         elif isinstance(value, Bits) and isinstance(width, int):
-            self.value = value.value & ((1 << width) - 1)
-            self.width = width
+            self._value = value._value & ((1 << width) - 1)
+            self._width = width
         elif isinstance(value, Iterable):
             tmp_value = 0
             tmp_width = 0
@@ -262,7 +380,7 @@ class Bits:
                     tmp_width += abs(e_width)
                     tmp_value = (tmp_value << e_width) | e_value
                 elif isinstance(each, Bits):
-                    tmp_width += each.width
+                    tmp_width += each._width
                     tmp_value = (tmp_value << each.width) | each.value
                 elif isinstance(each, tuple) and len(each) == 2:
                     e_value, e_width = each
@@ -270,14 +388,34 @@ class Bits:
                     tmp_value = (tmp_value << e_width) | e_value
                 else:
                     raise TypeError(f"Invalid Iterable sub value: {each}")
-            self.value = tmp_value
-            self.width = tmp_width
+            self._value = tmp_value
+            self._width = tmp_width
 
         # check
-        if self.value is None or self.width is None:
+        if self._value is None or self._width is None:
             raise TypeError(
                 f"Invalid value: input {type(value)}-{value} not match any process"
             )
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    @value.setter
+    def value(self, value: int) -> None:
+        self._value = value
+        self.fix_value()
+
+    @property
+    def width(self) -> int:
+        return self._width
+
+    @width.setter
+    def width(self, width: int) -> None:
+        if width < 1:
+            raise ValueError("width must be greater than 0")
+        self._width = width
+        self.fix_value()
 
     @overload
     def __getitem__(self, key: int) -> Bits:
@@ -293,7 +431,10 @@ class Bits:
         ...
 
     @overload
-    def __getitem__(self, key: Iterable[int | slice]) -> Bits: ...
+    def __getitem__(self, key: Iterable[int | slice]) -> Bits:
+        """
+        混合切片，支持其他类型的切片同时使用"""
+        ...
 
     def __getitem__(self, key: int | slice | Iterable[int | slice]) -> Bits:
         if isinstance(key, int):
@@ -327,8 +468,41 @@ class Bits:
         else:
             raise TypeError("Bits index must be an integer or slice")
 
+    def __repr__(self) -> str:
+        return f"Bits(D:{self.value}|H:{hex(self.value)}|W:{self.width})"
+
     def __str__(self) -> str:
-        return f"Bits({self.value}, {self.width})"
+        return self.fmt(Bits._to_str_type)
+
+    def fmt(self, base: Literal[2, 8, 10, 16], digit_sep: bool = True) -> str:
+        if base == 2:
+            digit_sep_width = Bits._digit_separator_width_in_base_2
+        elif base == 8:
+            digit_sep_width = Bits._digit_separator_width_in_base_8
+        elif base == 10:
+            digit_sep_width = Bits._digit_separator_width_in_base_10
+        elif base == 16:
+            digit_sep_width = Bits._digit_separator_width_in_base_16
+        else:
+            raise ValueError(f"{base = } not in [2,8,10,16]")
+        return fmt_in_base(
+            value=self.value,
+            width=self.width,
+            base=base,
+            digit_separator=Bits._digit_separator_type if digit_sep else "",
+            digits_per_group=digit_sep_width,
+            upper_base=Bits._upper_base_symbol,
+            verilog_like=Bits._verilog_like_type,
+            upper_hex_digits=Bits._upper_hex_digits,
+        )
+
+    def fix_value(self) -> None:
+        """当alue或width被修改之后进行的数据检查与截断处理"""
+        self.value = self.value & ((1 << self.width) - 1)
+
+    def set_width(self, width: int) -> None:
+        self.width = width
+        self.fix_value()
 
 
 class Binary:

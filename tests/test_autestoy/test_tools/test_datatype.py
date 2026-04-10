@@ -1,6 +1,13 @@
 import numpy as np
 
-from autestoy.tools.datatype import Bits, num2bytes, str2num
+from autestoy.tools.datatype import (
+    Bits,
+    fmt_in_base,
+    insert_every_n,
+    num2bytes,
+    str2num,
+    width_in_base,
+)
 
 
 def test_str2num():
@@ -80,6 +87,22 @@ def test_num2bits():
     print("num2bits ok")
 
 
+def test_insert_every_n():
+    assert insert_every_n("12345678", 4, " ") == "1234 5678"
+    assert insert_every_n("12345678", 2, ":") == "12:34:56:78"
+    assert insert_every_n("12345678", 1, ",") == "1,2,3,4,5,6,7,8"
+    assert insert_every_n("12345678", 3, "_") == "12_345_678"
+
+
+def test_fmt_in_base():
+    assert fmt_in_base(0b11110000, 8, 2, "_", 4, False) == "0b1111_0000"
+    assert fmt_in_base(0b11110000, 8, 2, "_", 4, True) == "8'b1111_0000"
+    assert fmt_in_base(0b11110000, 10, 2, "_", 4, False) == "0b00_1111_0000"
+    assert fmt_in_base(0b11110000, 10, 2, "_", 4, True) == "10'b00_1111_0000"
+    assert fmt_in_base(0x1234ABCD, 32, 16, "_", 4, False) == "0x1234_ABCD"
+    assert fmt_in_base(0x1234ABCD, 32, 16, "_", 4, True) == "32'h1234_ABCD"
+
+
 def test_Bits_init():
     t = Bits(0x12345678, 32)
     assert t.value == 0x12345678
@@ -153,3 +176,12 @@ def test_Bits_getitem():
     assert t[7, 6, 5, 4, 3, 2, 1, 0].width == 8
     assert t[:0, :1, :2, :3, :4, :5, :6, :7].value == 0x01
     assert t[:0, :1, :2, :3, :4, :5, :6, :7].width == 8
+
+
+def test_Bits_str():
+    t = Bits(0x0123_4567_89AB_CEDF, 64)
+    Bits.set_str_type(16)
+    assert str(t) == "0x0123_4567_89AB_CEDF"
+    t = Bits(0o123_456_765, 25)
+    Bits.set_str_type(8)
+    assert str(t) == "0o123_456_765"

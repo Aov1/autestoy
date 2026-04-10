@@ -208,3 +208,9 @@ def test_SSH_long_running_list(ssh: SSH):
         print(e.get_result())
     # res = ssh.long_running('')
     # res.long_running_task.join()
+
+
+def test_Channel_get_pid(ssh: SSH):
+    ch = ssh.create_channel()
+    pid = ch._get_channel_pid()
+    assert pid == ch.pid

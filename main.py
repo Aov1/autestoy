@@ -38,11 +38,23 @@ from pprint import pprint
 from autestoy import SSH, RemoteConfig, ulog
 
 pad_conf = RemoteConfig(
-    user="u0_a210",
-    ip="192.168.18.6",
+    user="aoiiix",
+    ip="127.0.0.1",
     password="0402",
-    port=8022,
-).set_name("Huawei Matepad")
+    port=22,
+).set_name("Thinkbook14+")
+
+dut = SSH(pad_conf)
+res = dut.exec_run("ps -ax | tail -n 5")
+ll = res.cut_fields(2, 6, re_delimiter=r"[\t\s]+")
+pprint(ll)
+
+# pad_conf = RemoteConfig(
+#     user="u0_a210",
+#     ip="192.168.18.6",
+#     password="0402",
+#     port=8022,
+# ).set_name("Huawei Matepad")
 
 # dut = SSH(pad_conf)
 # dut.kill(3956)
@@ -61,6 +73,6 @@ pad_conf = RemoteConfig(
 # pprint(res)
 # ulog(ch._command("echo $$"))
 
-import sqlite3 as sql
+# import sqlite3 as sql
 
-conn = sql.connect("")
+# conn = sql.connect("")

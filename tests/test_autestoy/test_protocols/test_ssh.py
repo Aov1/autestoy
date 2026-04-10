@@ -164,6 +164,9 @@ def test_exec_run(ssh: SSH):
     ssh.exec_run("ls")
     ssh.with_path("project/autestoy_sim").exec_run("python t10s.py")
 
+    Term.sw_absolute_timestamp = False
+    Term.sw_timestamp = True
+
 
 def test_Channel_get_exit_code(ssh: SSH):
     ch = ssh.create_channel()

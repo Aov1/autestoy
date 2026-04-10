@@ -533,7 +533,7 @@ class Channel:
                 while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
                     buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
                     line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
-                    line = line_b.decode().strip().replace("\r", "")
+                    line = line_b.decode().rstrip().replace("\r", "")
 
                     if (
                         len(cmd_lines) == 0 and not f_cmd_lines_skip

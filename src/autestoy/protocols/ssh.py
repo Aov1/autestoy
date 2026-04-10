@@ -261,12 +261,17 @@ class SSH:
             processed_cmd, get_pty=True
         )
         while not stdout.channel.exit_status_ready():
-            if (tmp_out := stdout.readline().strip()) != "":
-                record.result.append(Term.putsln(tmp_out))
+            line = stdout.readline()
+            if line.strip() != "":
+                record.result.append(Term.putsln(line.rstrip()))
             time.sleep(0.01)
         else:
-            if (tmp_out := stdout.readline().strip()) != "":
-                record.result.append(Term.putsln(tmp_out))
+            while True:
+                line = stdout.readline()
+                if line.strip() != "":
+                    record.result.append(Term.putsln(line.rstrip()))
+                else:
+                    break
             record.exit_code = stdout.channel.recv_exit_status()
         record.record_end()
         return record

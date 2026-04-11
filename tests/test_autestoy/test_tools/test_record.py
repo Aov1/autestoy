@@ -1,6 +1,6 @@
 from pprint import pprint
 
-from autestoy import CmdRecord
+from autestoy.tools.record import CmdRecord
 
 
 def test_cnt_fields():

@@ -2,29 +2,25 @@ from .export.term import Term, TermStyle
 from .protocols.ssh import SSH, CollectObj, RemoteConfig
 from .tools.ansi import AnsiBackground, AnsiColor, AnsiReset, AnsiStyle
 from .tools.control import ulog
-from .tools.record import CmdRecord
+from .tools.datatype import Bits
 from .tools.timestamp import Timestamp
 
-# from .tools.ansi import remove_ansi,remove_ansi_bytes
 __all__ = [
-    # export/term.py
+    # 重要类或函数
+    "SSH",
+    "RemoteConfig",
+    "ulog",
+    "Bits",
+    # 终端相关
     "Term",
     "TermStyle",
-    "ulog",
-    # protocols/ssh.py
-    "SSH",
-    "CollectObj",
-    "RemoteConfig",
-    # tools/ansi.py
     "AnsiBackground",
     "AnsiColor",
     "AnsiReset",
     "AnsiStyle",
-    # tools/record.py
-    "CmdRecord",
-    # tools/timestamp.py
+    # 工具类或函数
+    "CollectObj",
     "Timestamp",
-    # this file
     "GlobalTimeBase",
 ]
 

@@ -55,6 +55,8 @@ class RemoteConfig:
 class SSH:
     """SSH协议类，用于连接远程主机"""
 
+    sync_local_terminal_size: bool = False
+
     def __init__(
         self,
         remote_config: RemoteConfig,
@@ -231,7 +233,29 @@ class SSH:
             processed_cmd = "exec " + cmd
         return head_path_info, processed_cmd
 
-    def exec_run(self, cmd: str) -> CmdRecord[str]:
+    def _cmd_output_process(self, record: CmdRecord[str]) -> CmdRecord[str]:
+        if not record.stdin or not record.stdout or not record.stderr:
+            raise ValueError("record.stdin or record.stdout or record.stderr is None")
+
+        while not record.stdout.channel.exit_status_ready():
+            line = record.stdout.readline()
+            if line.strip() != "":
+                record.result.append(Term.putsln(line.rstrip()))
+            time.sleep(0.01)
+        else:
+            while True:
+                line = record.stdout.readline()
+                if line.strip() != "":
+                    record.result.append(Term.putsln(line.rstrip()))
+                else:
+                    break
+            record.exit_code = record.stdout.channel.recv_exit_status()
+        record.record_end()
+        return record
+
+    def exec_run(
+        self, cmd: str, sudo: bool = False, password: str | None = None
+    ) -> CmdRecord[str]:
         """执行命令，返回输出信息记录类CmdRecord\n
         ```python
         remote_config = RemoteConfig(
@@ -249,38 +273,57 @@ class SSH:
 
         SSH类实现了with_path、set_global_path和cd方法，用于exec_run设置临时路径和全局路径
         """
-        head_path_info, processed_cmd = self._path_process(cmd)
+        tmp_cmd = f"sudo -S {cmd}" if sudo and password is not None else cmd
+        head_path_info, processed_cmd = self._path_process(tmp_cmd)
 
         record = CmdRecord[str](
             cmd,
-            f"[{self.name}]{head_path_info} $",
+            f"[{self.name}][sudo]{head_path_info} $"
+            if sudo and password is not None
+            else f"[{self.name}]{head_path_info} $",
         )
         self.cmds.append(record)
         record.start_time, _ = Term.putsln(record.get_fmt_prompt())
-        record.stdin, stdout, _stderr = self.remote.exec_command(
+        record.stdin, record.stdout, record.stderr = self.remote.exec_command(
             processed_cmd, get_pty=True
         )
         # 当终端宽度改变时重新计算宽度
-        if Term.is_terminal_size_changed():
-            timestamp_width = len(Term.fmt_timestamp())
+        if SSH.sync_local_terminal_size and Term.is_terminal_size_changed():
+            timestamp_width = len(Term.fmt_timestamp()) + 1
             record.stdin.channel.resize_pty(
                 Term.terminal_size[0] - timestamp_width, Term.terminal_size[1]
             )
-        while not stdout.channel.exit_status_ready():
-            line = stdout.readline()
-            if line.strip() != "":
-                record.result.append(Term.putsln(line.rstrip()))
-            time.sleep(0.01)
-        else:
-            while True:
-                line = stdout.readline()
-                if line.strip() != "":
-                    record.result.append(Term.putsln(line.rstrip()))
-                else:
-                    break
-            record.exit_code = stdout.channel.recv_exit_status()
-        record.record_end()
-        return record
+
+        if sudo and password is not None:
+            while (
+                not record.stdout.channel.exit_status_ready()
+                and not record.stdout.channel.recv_ready()
+            ):
+                time.sleep(0.002)
+            _ = record.stdout.channel.recv(65535)
+            record.stdin.write(password + "\n")
+            record.stdin.flush()
+
+        return self._cmd_output_process(record)
+        # while not stdout.channel.exit_status_ready():
+        #     line = stdout.readline()
+        #     if line.strip() != "":
+        #         record.result.append(Term.putsln(line.rstrip()))
+        #     time.sleep(0.01)
+        # else:
+        #     while True:
+        #         line = stdout.readline()
+        #         if line.strip() != "":
+        #             record.result.append(Term.putsln(line.rstrip()))
+        #         else:
+        #             break
+        #     record.exit_code = stdout.channel.recv_exit_status()
+        # record.record_end()
+        # return record
+
+    def exec_run_sudo(self, cmd: str, password: str) -> CmdRecord[str]:
+        """执行sudo命令，返回输出信息记录类CmdRecord"""
+        return self.exec_run(cmd, sudo=True, password=password)
 
     def exec_run_lines(self, *cmds: str | Iterable[str]) -> list[CmdRecord[str]]:
         """顺序执行多行命令，返回结果列表"""
@@ -302,8 +345,8 @@ class SSH:
     def _long_running_task(self, cmd: str, record: CmdRecording[str]):
         record.stdin, stdout, _stderr = self.remote.exec_command(cmd, get_pty=True)
         # 当终端宽度改变时重新计算宽度
-        if Term.is_terminal_size_changed():
-            timestamp_width = len(Term.fmt_timestamp())
+        if SSH.sync_local_terminal_size and Term.is_terminal_size_changed():
+            timestamp_width = len(Term.fmt_timestamp()) + 1
             record.stdin.channel.resize_pty(
                 Term.terminal_size[0] - timestamp_width, Term.terminal_size[1]
             )
@@ -690,7 +733,7 @@ class Channel:
     def _resize_pty(self):
         # 当终端宽度改变时重新计算宽度
         if Term.is_terminal_size_changed():
-            timestamp_width = len(Term.fmt_timestamp())
+            timestamp_width = len(Term.fmt_timestamp()) + 1
             self.shell.resize_pty(
                 Term.terminal_size[0] - timestamp_width, Term.terminal_size[1]
             )

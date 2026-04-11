@@ -45,9 +45,14 @@ pad_conf = RemoteConfig(
 ).set_name("Thinkbook14+")
 
 dut = SSH(pad_conf)
-res = dut.exec_run("ps -ax | tail -n 5")
-ll = res.cut_fields(2, 6, re_delimiter=r"[\t\s]+")
-pprint(ll)
+
+res = dut.with_path("./Code/Python").exec_run("echo '0402' | sudo -S dmesg | tail -n 5")
+res = dut.with_path("./Code/Python").exec_run_sudo("dmesg | tail -n 5", "0402")
+ulog(res.get_result_string())
+res = dut.with_path("./Code/Python").exec_run(
+    "dmesg | tail -n 5", sudo=True, password="0402"
+)
+ulog(res.get_result_string())
 
 # pad_conf = RemoteConfig(
 #     user="u0_a210",

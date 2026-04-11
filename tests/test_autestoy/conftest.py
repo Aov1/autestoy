@@ -13,7 +13,7 @@ def remote():
         # ip="192.168.4.32",
         password="0402",
         port=8022,
-    ).set_name("HUAWEI MATEPAD 12.2")
+    ).set_name("HUAWEI")
 
 
 @pytest.fixture(scope="session")

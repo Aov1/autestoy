@@ -20,7 +20,7 @@ def get_terminal_size() -> tuple[int, int]:
 class TermStyle:
     timestamp_font_color = AnsiColor.blue
     timestamp_background_color = AnsiColor.none
-    relative_timestamp_bits = 3
+    relative_timestamp_bits = 5
     relative_timestamp_width = 13
 
     msg_font_color = AnsiColor.none

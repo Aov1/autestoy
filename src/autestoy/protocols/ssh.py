@@ -71,10 +71,6 @@ class SSH:
             name=self.name,
             info=f"{self.remote_config.user}@{self.remote_config.ip}",
         )
-        # Term.putsln(
-        #     f"[{self.meta_record.type}][{self.meta_record.name}][{self.meta_record.info}] Created"
-        # )
-        # config
         self.remote = pk.SSHClient()
         self.remote.set_missing_host_key_policy(pk.AutoAddPolicy())
         self.timeout: None | float = timeout
@@ -109,34 +105,45 @@ class SSH:
             # print(self.base_path)
             self.connect_time = time.time()
 
-    def __del__(self):
+    def close_sub_channels(self):
+        for ch in self.channels:
+            if not ch.shell.closed:
+                ch.shell.close()
+                ch.meta_record.logs.append(
+                    Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
+                )
+
+    def close_sub_sftp(self):
+        for sftp in self.sftp:
+            if not sftp.sftp.sock.closed:
+                sftp.sftp.close()
+                Term.putsln(f"{sftp.meta_record.get_fmt_prompt()} Closed")
+
+    def close_self(self):
         if self.is_connected():
-            for ch in self.channels:
-                if not ch.shell.closed:
-                    ch.shell.close()
-                    ch.meta_record.logs.append(
-                        Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
-                    )
             self.remote.close()
             self.meta_record.logs.append(
                 Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
             )
 
+    def close_all(self):
+        if self.is_connected():
+            self.close_sub_channels()
+            self.close_sub_sftp()
+            self.close_self()
+
     def __enter__(self):
+        """上下文管理，支持with语句\n
+        ```python
+        with SSH(remote_config) as ssh:
+            ssh.exec_run("./script.sh")
+        ```
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.is_connected():
-            for ch in self.channels:
-                if not ch.shell.closed:
-                    ch.shell.close()
-                    ch.meta_record.logs.append(
-                        Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
-                    )
-            self.remote.close()
-            self.meta_record.logs.append(
-                Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
-            )
+        """with 退出时close自身、sub Channel和sub sftp"""
+        self.close_all()
         return False
 
     def is_connected(self) -> bool:
@@ -204,7 +211,6 @@ class SSH:
             f"[{self.name}]{head_path_info} $",
         )
         self.cmds.append(record)
-        # record.start_time = Timestamp()
         Term.putsln(record.get_fmt_prompt())
         record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
 
@@ -305,21 +311,6 @@ class SSH:
             record.stdin.flush()
 
         return self._cmd_output_process(record)
-        # while not stdout.channel.exit_status_ready():
-        #     line = stdout.readline()
-        #     if line.strip() != "":
-        #         record.result.append(Term.putsln(line.rstrip()))
-        #     time.sleep(0.01)
-        # else:
-        #     while True:
-        #         line = stdout.readline()
-        #         if line.strip() != "":
-        #             record.result.append(Term.putsln(line.rstrip()))
-        #         else:
-        #             break
-        #     record.exit_code = stdout.channel.recv_exit_status()
-        # record.record_end()
-        # return record
 
     def exec_run_sudo(self, cmd: str, password: str) -> CmdRecord[str]:
         """执行sudo命令，返回输出信息记录类CmdRecord"""
@@ -358,7 +349,6 @@ class SSH:
                 break
 
         while not record.stop_event.is_set() and not stdout.channel.exit_status_ready():
-            # print(stdout.channel.exit_status_ready())
             line = stdout.readline()
             if line != "":
                 line = line.rstrip()
@@ -385,8 +375,6 @@ class SSH:
                 record.fifo.put(line)
             record.record_end()
             record.exit_code = stdout.channel.recv_exit_status()
-            # DBGexit_status()
-            # Term.putsln(f"[{record.id}] task end")
 
     def long_running(self, cmd: str, start_task: bool = True) -> CmdRecording[str]:
         """多线程执行，对于命令创建一个线程，不会阻塞主线程执行\n
@@ -406,13 +394,10 @@ class SSH:
         task = td.Thread(target=self._long_running_task, args=(processed_cmd, record))
         task.daemon = True
         record.long_running_task = task
-        # record.start_time = time.time()  # record start time
         if start_task:
             Term.putsln(record.get_fmt_prompt())
             task.start()
 
-        # time.sleep(wait_time)
-        # task.join()
         return record
 
     @overload

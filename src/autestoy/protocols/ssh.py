@@ -65,7 +65,7 @@ class SSH:
     ) -> None:
         # class create reocrd
         self.remote_config: RemoteConfig = remote_config
-        self.name = self.remote_config.name
+        self.name: str = self.remote_config.name
         self.meta_record = MetaRecord(
             type="SSH",
             name=self.name,
@@ -78,6 +78,8 @@ class SSH:
         self.channels: list[Channel] = []  # 记录子通道
         self.cmds: list[CmdRecord[str]] = []  # 记录运行的命令
         self.sftp: list[SFTP] = []  # 记录开启的SFTP服务
+        self.last_record: CmdRecord[str] | None = None
+        self.last_recording: CmdRecording[str] | None = None
         # path config
         self.global_path: str | None = None
         self.temp_path: str | None = None
@@ -257,6 +259,7 @@ class SSH:
                     break
             record.exit_code = record.stdout.channel.recv_exit_status()
         record.record_end()
+        self.last_record = record
         return record
 
     def exec_run(
@@ -375,6 +378,7 @@ class SSH:
                 record.fifo.put(line)
             record.record_end()
             record.exit_code = stdout.channel.recv_exit_status()
+            self.last_recording = record
 
     def long_running(self, cmd: str, start_task: bool = True) -> CmdRecording[str]:
         """多线程执行，对于命令创建一个线程，不会阻塞主线程执行\n
@@ -500,6 +504,8 @@ class Channel:
         )
         self.prompt_complie = re.compile(prompt_pattern)
         self.cmds: list[CmdRecord[str]] = []
+        self.last_record: CmdRecord[str] | None = None
+        # self.last_recording: CmdRecording[str] | None = None
 
         # 处理初始化通道时产生的默认输出，并获终端取提示符
         string = ""
@@ -604,6 +610,7 @@ class Channel:
 
         record.record_end()
         record.exit_code = self._get_exit_code()
+        self.last_record = record
         return record
 
     @overload
@@ -740,6 +747,7 @@ class SFTP:
         # self.tmp_channel = ssh.remote.open_sftp().get_channel()
         self.prompt = f"[{self.meta_record.name}][{self.meta_record.type}] >>>"
         self.cmds: list[CmdRecord] = []
+        self.last_record: CmdRecord | None = None
         # self.aty_channel = Channel(ssh)
         self.sftp = ssh.remote.open_sftp()
         self.meta_record.logs.append(
@@ -772,6 +780,7 @@ class SFTP:
         for dir in res:
             record.result.append(Term.putsln(dir))
         record.record_end()
+        self.last_record = record
         return record
 
     def listdir_attr(self, path: str = ".") -> CmdRecord[SFTPAttributes]:
@@ -786,6 +795,7 @@ class SFTP:
             t, _ = Term.putsln(str(attr))
             record.result.append((t, Result(attr)))
         record.record_end()
+        self.last_record = record
         return record
 
     def listdir_iter(
@@ -801,6 +811,7 @@ class SFTP:
         res = self.sftp.listdir_iter(path, read_aheads)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def open(
@@ -815,6 +826,7 @@ class SFTP:
         res = self.sftp.open(filename, mode, bufsize)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def remove(self, path: bytes | str) -> CmdRecord[None]:
@@ -826,6 +838,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.remove(path)
         record.record_end()
+        self.last_record = record
         return record
 
     def rename(self, oldpath: bytes | str, newpath: bytes | str) -> CmdRecord[None]:
@@ -837,6 +850,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.rename(oldpath, newpath)
         record.record_end()
+        self.last_record = record
         return record
 
     def posix_rename(
@@ -850,6 +864,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.posix_rename(oldpath, newpath)
         record.record_end()
+        self.last_record = record
         return record
 
     def mkdir(self, path: bytes | str, mode: int = 0o777) -> CmdRecord[None]:
@@ -861,6 +876,7 @@ class SFTP:
         self.cmds.append(record)
         self.sftp.mkdir(path, mode)
         record.record_end()
+        self.last_record = record
         return record
 
     def rmdir(self, path: bytes | str) -> CmdRecord[None]:
@@ -872,6 +888,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.rmdir(path)
         record.record_end()
+        self.last_record = record
         return record
 
     def stat(self, path: bytes | str) -> CmdRecord[SFTPAttributes]:
@@ -884,6 +901,7 @@ class SFTP:
         res = self.sftp.stat(path)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def lstat(self, path: bytes | str) -> CmdRecord[SFTPAttributes]:
@@ -896,6 +914,7 @@ class SFTP:
         res = self.sftp.lstat(path)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def symlink(self, source: bytes | str, dest: bytes | str) -> CmdRecord[None]:
@@ -907,6 +926,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.symlink(source, dest)
         record.record_end()
+        self.last_record = record
         return record
 
     def chmod(self, path: bytes | str, mode: int) -> CmdRecord[None]:
@@ -918,6 +938,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.chmod(path, mode)
         record.record_end()
+        self.last_record = record
         return record
 
     def chown(self, path: bytes | str, uid: int, gid: int) -> CmdRecord[None]:
@@ -929,6 +950,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.chown(path, uid, gid)
         record.record_end()
+        self.last_record = record
         return record
 
     def utime(
@@ -942,6 +964,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.utime(path, times)
         record.record_end()
+        self.last_record = record
         return record
 
     def truncate(self, path: bytes | str, size: int) -> CmdRecord[None]:
@@ -953,6 +976,7 @@ class SFTP:
         Term.putsln(record.get_fmt_prompt())
         self.sftp.truncate(path, size)
         record.record_end()
+        self.last_record = record
         return record
 
     def readlink(self, path: bytes | str) -> CmdRecord[str | None]:
@@ -965,6 +989,7 @@ class SFTP:
         res = self.sftp.readlink(path)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def normalize(self, path: bytes | str) -> CmdRecord[str]:
@@ -977,6 +1002,7 @@ class SFTP:
         res = self.sftp.normalize(path)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def chdir(self, path: None | bytes | str = None) -> CmdRecord[None]:
@@ -988,6 +1014,7 @@ class SFTP:
         self.cmds.append(record)
         self.sftp.chdir(path)
         record.record_end()
+        self.last_record = record
         return record
 
     def getcwd(self) -> CmdRecord[str | None]:
@@ -1002,6 +1029,7 @@ class SFTP:
         record.result_append(res)
 
         record.record_end()
+        self.last_record = record
         return record
 
     def putfo(
@@ -1021,6 +1049,7 @@ class SFTP:
         res = self.sftp.putfo(fl, remotepath, file_size, callback, confirm)
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def put(
@@ -1040,6 +1069,7 @@ class SFTP:
         Term.putsln(str(res))
         record.result_append(res)
         record.record_end()
+        self.last_record = record
         return record
 
     def getfo(
@@ -1062,6 +1092,7 @@ class SFTP:
         t, _ = Term.putsln(str(res))
         record.record_end()
         record.result_append(res, t)
+        self.last_record = record
         return record
 
     def get(
@@ -1082,7 +1113,9 @@ class SFTP:
             remotepath, localpath, callback, prefetch, max_concurrent_prefetch_requests
         )
         record.record_end()
+        self.last_record = record
         return record
 
     def auto_mkdir(self, path: str) -> None:
         """自动创建目录，如果目录已存在则不做任何操作"""
+        pass

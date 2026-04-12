@@ -472,7 +472,7 @@ class Bits:
         return f"Bits(D:{self.value}|H:{hex(self.value)}|W:{self.width})"
 
     def __str__(self) -> str:
-        return self.fmt(Bits._to_str_type)
+        return self.fmt(Bits._to_str_type, digit_sep=False)
 
     def fmt(self, base: Literal[2, 8, 10, 16], digit_sep: bool = True) -> str:
         if base == 2:

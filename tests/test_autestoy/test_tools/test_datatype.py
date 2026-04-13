@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from autestoy.tools.datatype import (
     Bits,
@@ -181,7 +182,152 @@ def test_Bits_getitem():
 def test_Bits_str():
     t = Bits(0x0123_4567_89AB_CEDF, 64)
     Bits.set_str_type(16)
-    assert str(t) == "0x0123_4567_89AB_CEDF"
+    assert str(t) == "0x0123456789ABCEDF"
     t = Bits(0o123_456_765, 25)
     Bits.set_str_type(8)
-    assert str(t) == "0o123_456_765"
+    assert str(t) == "0o123456765"
+
+
+def test_Bits_fix():
+    Bits.set_str_type(16)
+    t = Bits(0x0123_4567_89AB_CEDF, 64)
+    assert str(t) == "0x0123456789ABCEDF"
+    t.value = 0x87654321
+    assert str(t) == "0x0000000087654321"
+    t.width = 8
+    assert str(t) == "0x21"
+
+
+def test_Bits__split_range():
+    t = Bits(0x1234_5678, 32)
+    assert t._split_range(0) == ((31, 0x1234_5678 >> 1), (0, 0))
+    assert t._split_range(15) == ((16, 0x1234), (15, 0x5678 & (0xFFFF >> 1)))
+    assert t._split_range((0, 15)) == ((0, 0), (16, 0x5678))
+    assert t._split_range((15, 0)) == ((16, 0x1234), (0, 0))
+    assert t._split_range((12, 15)) == ((12, 0x123), (16, 0x5678))
+    assert t._split_range((15, 12)) == ((16, 0x1234), (12, 0x678))
+
+
+def test_Bits_set_bits():
+    t = Bits(0x1234_5670, 32)
+    t.set_bits(0, 0x8765_4321)
+    assert t.value == 0x1234_5671
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((0, 15), 0x4321)
+    assert t.value == 0x4321_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 0), 0x8765)
+    assert t.value == 0x1234_8765
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((12, 15), 0xF)
+    assert t.value == 0x123F_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 12), 0xF)
+    assert t.value == 0x1234_F678
+
+    t = Bits(0x1234_5670, 32)
+    t.set_bits(0, "0x8765_4321")
+    assert t.value == 0x1234_5671
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((0, 15), "16'h4321")
+    assert t.value == 0x4321_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((0, 15), "12'h4321")
+    assert t.value == 0x0321_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 0), "0x8765")
+    assert t.value == 0x1234_8765
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((12, 15), "0b1111")
+    assert t.value == 0x123F_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 12), "0xFF")
+    assert t.value == 0x1234_F678
+
+
+def test_Bits___setitem__():
+    t = Bits(0x1234_5678, 32)
+    t[0] = 1
+    assert t.value == 0x1234_5679
+
+    t = Bits(0x1234_5678, 32)
+    t[15:0] = 0xFFFF
+    assert t.value == 0x1234_FFFF
+
+    t = Bits(0x1234_5678, 32)
+    t[0:15] = Bits("16'hffff")
+    assert t.value == 0xFFFF_5678
+
+    t = Bits(0x1234_5678, 32)
+    t[0:15] = "16'hffffff"
+    assert t.value == 0xFFFF_5678
+
+    t = Bits(0x1234_5678, 32)
+    t[0:15] = "32'hffff_ffff"
+    assert t.value == 0xFFFF_5678
+
+    t = Bits(0x0000_0000, 32)
+    t[0] = 1  # Bits(0x0000_0001, 32)
+    assert t.value == 0x0000_0001
+    t[4:] = 1  # Bits(0x0000_0011, 32)
+    assert t.value == 0x0000_0011
+    t[:3] = 1  # Bits(0x1000_0011, 32)
+    assert t.value == 0x1000_0011
+
+
+def test_Bits_split_iter():
+    t = Bits(0x1234_5678, 32)
+    it = t.split_iter(4)
+    assert next(it) == Bits("0x1_u4")
+    assert next(it) == Bits("0x2_i4")
+    assert next(it) == Bits("4'h3")
+    assert next(it) == Bits("4'b0100")
+    assert next(it) == Bits("0x5_u4")
+    assert next(it) == Bits("0x6_u4")
+    assert next(it) == Bits("0x7_u4")
+    assert next(it) == Bits("0x8_u4")
+    with pytest.raises(StopIteration):
+        next(it)
+
+    t = Bits(0b10_1010_1010_1010_1010_1010_1010_10101, 31)
+    it = t.split_iter(3, right_align=False)
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b1_u1")
+    with pytest.raises(StopIteration):
+        next(it)
+
+    t = Bits(0b101_010_101_1, 10)
+    it = t.split_iter(3, right_align=False, from_left=False)
+    assert next(it) == Bits("0b1_u1")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    with pytest.raises(StopIteration):
+        next(it)
+
+    t = Bits(0b1_101_010_101, 10)
+    it = t.split_iter(3, from_left=False)
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b1_u1")
+    with pytest.raises(StopIteration):
+        next(it)

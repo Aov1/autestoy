@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Iterable, Literal, overload
+from typing import Iterable, Iterator, Literal, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -408,6 +408,8 @@ class Bits:
 
     @property
     def width(self) -> int:
+        if self._width < 1:
+            self._value = 1
         return self._width
 
     @width.setter
@@ -469,12 +471,15 @@ class Bits:
             raise TypeError("Bits index must be an integer or slice")
 
     def __repr__(self) -> str:
+        """提供调试信息，十进制|十六进制|宽度"""
         return f"Bits(D:{self.value}|H:{hex(self.value)}|W:{self.width})"
 
     def __str__(self) -> str:
+        """对于fmt方法的简单封装，提供了默认进制的显示，可通过类属性修改修改"""
         return self.fmt(Bits._to_str_type, digit_sep=False)
 
     def fmt(self, base: Literal[2, 8, 10, 16], digit_sep: bool = True) -> str:
+        """将Bits实例转换为对应进制的字符串，主要用于显示与信息传递"""
         if base == 2:
             digit_sep_width = Bits._digit_separator_width_in_base_2
         elif base == 8:
@@ -498,11 +503,205 @@ class Bits:
 
     def fix_value(self) -> None:
         """当alue或width被修改之后进行的数据检查与截断处理"""
-        self.value = self.value & ((1 << self.width) - 1)
+        self._value = self._value & ((1 << self.width) - 1)
 
     def set_width(self, width: int) -> None:
         self.width = width
         self.fix_value()
+
+    def _split_range(
+        self, brange: tuple[int, int] | int
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        """将self.value按照range分割为两个部分，以tuple表示，第一个tuple为高位，第二个tuple为低位\n
+        每个tuple中第一位是宽度，第二位是值，即返回((width_high,value_high), (width_low,value_low))"""
+        val = self.value
+        if isinstance(brange, int):
+            if brange >= self.width or brange < 0:
+                raise ValueError(
+                    f"Range exceeds width: {brange} >= {self.width} or < 0"
+                )
+            return self._split_range((brange, brange))
+        elif isinstance(brange, tuple):
+            if any(brange) < 0 or any(brange) >= self.width:
+                raise ValueError(
+                    f"Range exceeds width: {brange} >= {self.width} or < 0"
+                )
+
+            if brange[0] >= brange[1]:
+                rh, rl = brange
+            else:  # brange[0] < brange[1]
+                rh = self.width - 1 - brange[0]
+                rl = self.width - 1 - brange[1]
+
+            width_high = self.width - 1 - rh
+            value_high = (val >> (rh + 1)) & max_value(width_high)
+            width_low = rl
+            value_low = val & max_value(rl)
+            return (width_high, value_high), (width_low, value_low)
+
+    def split_iter(
+        self, group_width: int, right_align: bool = True, from_left: bool = True
+    ) -> Iterator[Bits]:
+        """将Bits类的值按照group_width分割为多个Bits类，返回一个迭代器"""
+        if group_width < 1 or group_width > self.width:
+            raise ValueError(f"Invalid group width: {group_width}")
+        if right_align:
+            if from_left:
+                d = self.width % group_width
+                if d != 0:
+                    yield self[0 : d - 1]
+                for i in range(d, self.width, group_width):
+                    yield self[i : i + group_width - 1]
+            else:  # from_right
+                d = self.width % group_width
+                for i in range(0, self.width - d, group_width):
+                    yield self[i + group_width - 1 : i]
+                if d != 0:
+                    yield self[self.width - 1 : self.width - d]
+        else:  # left_align
+            if from_left:
+                d = self.width % group_width
+                for i in range(0, self.width - d, group_width):
+                    yield self[i : i + group_width - 1]
+                if d != 0:
+                    yield self[self.width - d : self.width - 1]
+            else:  # from_right
+                d = self.width % group_width
+                if d != 0:
+                    yield self[d - 1 : 0]
+                for i in range(d, self.width, group_width):
+                    yield self[i + group_width - 1 : i]
+
+    def split(self, group_width: int) -> list[Bits]:
+        """将Bits类的值按照group_width分割为多个Bits类，返回一个列表\n
+        遵循右对齐、高位在列表前的顺序，即
+        ```python
+        val = Bits(0xF_1234_5678,33) # 高位0xF截断为0x1
+        val.split(8)
+        # 返回 [Bits(0x1,1), Bits(0x12,8).Bits(0x34,8),Bits(0x56,8),Bits(0x78,8)]
+        ```
+        需要其他对齐方式以及输出顺序请使用list(self.split_iter(group_width, right_align, from_left))
+        """
+        return list(self.split_iter(group_width))
+
+    def set_bits(
+        self, range: tuple[int, int] | int, value: int | str | Bits | bool
+    ) -> None:
+        """设置Bits类中间范围的值"""
+        set_value = 0
+        if isinstance(value, bool):
+            set_value = 1 if value else 0
+        elif isinstance(value, int):
+            if value < 0:
+                raise ValueError(f"Negative value not supported: {value}")
+            set_value = value
+        elif isinstance(value, str):
+            set_value = str2int(value)[1]
+        elif isinstance(value, Bits):
+            set_value = value.value
+        else:
+            raise TypeError(f"Unsupported type for value: {type(value)}")
+
+        set_width = 1
+        if isinstance(range, int):
+            set_width = 1
+            set_value = set_value % 2
+        elif isinstance(range, tuple):
+            set_width = abs(range[1] - range[0]) + 1
+            set_value = set_value & max_value(set_width)
+        else:
+            raise TypeError(f"Unsupported type for range: {type(range)}")
+
+        (width_high, value_high), (width_low, value_low) = self._split_range(range)
+        assert width_high + width_low + set_width == self.width, (
+            f"set_bits width Error {width_high}+{width_low}+{set_width} != {self.width}"
+        )
+        self.value = (
+            (value_high << (width_low + set_width))
+            | (set_value << width_low)
+            | value_low
+        )
+
+    def __setitem__(
+        self, key: int | slice | Iterable[int | slice], value: int | str | Bits | bool
+    ) -> None:
+        """支持切片赋值的语法\n
+        ```python
+        t = Bits(0x1234_5678, 32)
+        t[0:15] = Bits("16'hffff") # -> Bits(0xFFFF_5678,32)
+        t[15:0] = 0xFFFF           # -> Bits(0xFFFF_FFFF,32)
+        t[0:15] = "32'h1111_1111"  # -> Bits(0x1111_FFFF,32)
+        t = Bits(0x0000_0000,32)
+        t[0]  = 1 # Bits(0x0000_0001, 32)
+        t[4:] = 1 # Bits(0x0000_0011, 32)
+        t[:3] = 1 # Bits(0x1000_0011, 32)
+        ```
+        """
+        if isinstance(key, int):
+            self.set_bits(key, value)
+        elif isinstance(key, slice):
+            st, ed, exp = key.start, key.stop, key.step
+            if exp is not None:
+                raise ValueError("step is not supported")
+
+            if isinstance(st, int) and isinstance(ed, int):
+                self.set_bits((st, ed), value)
+            elif isinstance(st, int) and ed is None:
+                self.set_bits(st, value)
+            elif isinstance(ed, int) and st is None:
+                self.set_bits(self.width - 1 - ed, value)
+        elif isinstance(key, Iterable):
+            # need split_bits
+            for k in key:
+                if isinstance(k, int):
+                    pass
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Bits):
+            return self.value == other.value and self.width == other.width
+        elif isinstance(other, tuple) and len(other) == 2:
+            return self == Bits(other[0], other[1])
+        elif isinstance(other, str):
+            return self == Bits(other)
+        elif isinstance(other, int):
+            return self.value == other
+        elif isinstance(other, bool):
+            return self.value != 0
+        else:
+            raise TypeError(f"unsupported type: {type(other)}")
+
+    def __ne__(self, other: object) -> bool:
+        return not self.__eq__(other)
+
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, Bits):
+            return self.value < other.value
+        elif isinstance(other, tuple) and len(other) == 2:
+            return self < Bits(other[0], other[1])
+        elif isinstance(other, str):
+            return self < Bits(other)
+        elif isinstance(other, int):
+            return self.value < other
+        else:
+            raise TypeError(f"unsupported type: {type(other)}")
+
+    def __le__(self, other: object) -> bool:
+        return not self.__gt__(other)
+
+    def __gt__(self, other: object) -> bool:
+        if isinstance(other, Bits):
+            return self.value > other.value
+        elif isinstance(other, tuple) and len(other) == 2:
+            return self > Bits(other[0], other[1])
+        elif isinstance(other, str):
+            return self > Bits(other)
+        elif isinstance(other, int):
+            return self.value > other
+        else:
+            raise TypeError(f"unsupported type: {type(other)}")
+
+    def __ge__(self, other: object) -> bool:
+        return not self.__lt__(other)
 
 
 class Binary:

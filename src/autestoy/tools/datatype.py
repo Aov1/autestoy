@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Iterable, Iterator, Literal, Self, overload
+from typing import Iterable, Iterator, Literal, Self, Union, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -248,6 +248,11 @@ def fmt_in_base(
         raise ValueError(f"{base = } not in [2,8,10,16]")
 
 
+BitsInitValue = Union[
+    bool, int, str, "Bits", Iterable[tuple[int | str, int] | str | "Bits"]
+]
+
+
 class Bits:
     _one_line_max_width = 64
     _to_str_type: Literal[2, 8, 10, 16] = 16
@@ -295,61 +300,63 @@ class Bits:
     def set_one_line_max_width(cls, one_line_max_width: int) -> None:
         cls._one_line_max_width = one_line_max_width
 
-    @overload
-    def __init__(self, value: bool, width: int) -> None:
-        """当value为bool时，width用于指定宽度，相当于将True值转换为1、False转换为0"""
-        ...
+    # @overload
+    # def __init__(self, value: bool, width: int) -> None:
+    #     """当value为bool时，width用于指定宽度，相当于将True值转换为1、False转换为0"""
+    #     ...
 
-    @overload
-    def __init__(self, value: bool) -> None:
-        """当value为bool且没有width参数时，相当于将True值转换为0b1、False转换为0b0，宽度都为1"""
-        ...
+    # @overload
+    # def __init__(self, value: bool) -> None:
+    #     """当value为bool且没有width参数时，相当于将True值转换为0b1、False转换为0b0，宽度都为1"""
+    #     ...
 
-    @overload
-    def __init__(self, value: int, width: int) -> None:
-        """
-        当value为int时必须指定宽度\n
-        eg: Bits(123, 8) , Bits(0x1234, 16)
-        """
-        ...
+    # @overload
+    # def __init__(self, value: int, width: int) -> None:
+    #     """
+    #     当value为int时必须指定宽度\n
+    #     eg: Bits(123, 8) , Bits(0x1234, 16)
+    #     """
+    #     ...
 
-    @overload
-    def __init__(self, value: str) -> None:
-        """
-        当value为str时，并且value可被解析成整数且带有位数标识，自动解析宽度\n
-        eg: Bits("16'h1234") , Bits("255_u8") , Bits("0b1000_1110_i32")
-        """
-        ...
+    # @overload
+    # def __init__(self, value: str) -> None:
+    #     """
+    #     当value为str时，并且value可被解析成整数且带有位数标识，自动解析宽度\n
+    #     eg: Bits("16'h1234") , Bits("255_u8") , Bits("0b1000_1110_i32")
+    #     """
+    #     ...
 
-    @overload
-    def __init__(self, value: str, width: int) -> None:
-        """
-        当value为str，且value可被解析为不带宽度的int，width用于指定宽度\n
-        eg: Bits("123", 8) , Bits("0x1234", 16)\n
-        value可解析为带宽度的整形，且width给出了宽度时，width指定的宽度优先级大于字符串解析的宽度\n
-        eg: Bits("0x1234_u16", 32)-> 0x0000_1234 , Bits("0x1234_5678_i32", 16)-> 0x5678\n
-        值的注意的是，字符串解析包含了长度截断，width即使大于截断长度，数值依然被截断\n
-        eg: Bits("0x12345678_u16",32) -> Bits(0x0000_5678,32)\n
-        """
-        ...
+    # @overload
+    # def __init__(self, value: str, width: int) -> None:
+    #     """
+    #     当value为str，且value可被解析为不带宽度的int，width用于指定宽度\n
+    #     eg: Bits("123", 8) , Bits("0x1234", 16)\n
+    #     value可解析为带宽度的整形，且width给出了宽度时，width指定的宽度优先级大于字符串解析的宽度\n
+    #     eg: Bits("0x1234_u16", 32)-> 0x0000_1234 , Bits("0x1234_5678_i32", 16)-> 0x5678\n
+    #     值的注意的是，字符串解析包含了长度截断，width即使大于截断长度，数值依然被截断\n
+    #     eg: Bits("0x12345678_u16",32) -> Bits(0x0000_5678,32)\n
+    #     """
+    #     ...
 
-    @overload
-    def __init__(self, value: Bits, width: int) -> None:
-        """当value为Bits实例时，width用于指定宽度，相当于重置Bits的宽度"""
-        ...
+    # @overload
+    # def __init__(self, value: Bits, width: int | None = None) -> None:
+    #     """当value为Bits实例时，width用于指定宽度，相当于重置Bits的宽度"""
+    #     ...
 
-    @overload
-    def __init__(self, value: Bits) -> None:
-        """当value为Bits实例时，width为None时相当于复制了Bits实例"""
-        ...
+    # # @overload
+    # # def __init__(self, value: Bits) -> None:
+    # #     """当value为Bits实例时，width为None时相当于复制了Bits实例"""
+    # #     ...
 
-    @overload
-    def __init__(self, value: Iterable[tuple[int | str, int] | str | Bits]) -> None:
-        """当value为Iterable时，且Iterable的子类型是支持的初始化类型，创建拼接初始化"""
-        ...
+    # @overload
+    # def __init__(self, value: Iterable[tuple[int | str, int] | str | Bits]) -> None:
+    #     """当value为Iterable时，且Iterable的子类型是支持的初始化类型，创建拼接初始化"""
+    #     ...
 
     def __init__(
-        self, value: int | str | Bits | Iterable | bool, width: int | None = None
+        self,
+        value: BitsInitValue,
+        width: int | None = None,
     ) -> None:
         self._width: int
         self._value: int
@@ -397,12 +404,18 @@ class Bits:
                     tmp_value = (tmp_value << each.width) | each.value
                 elif isinstance(each, tuple) and len(each) == 2:
                     e_value, e_width = each
+                    if isinstance(e_value, str):
+                        e_value = str2int(e_value)[1]
                     tmp_width += e_width
                     tmp_value = (tmp_value << e_width) | e_value
                 else:
                     raise TypeError(f"Invalid Iterable sub value: {each}")
             self._value = tmp_value
             self._width = tmp_width
+        else:
+            raise TypeError(
+                f"Invalid value: input {type(value)}-{value} not match any process"
+            )
 
         # check
         if self._value is None or self._width is None:
@@ -737,7 +750,6 @@ class Bits:
             set_value = Bits(value, all_width)
             width_index = 0
             for k in key:
-                print(self)
                 if isinstance(k, int):
                     self.set_bits(
                         k, set_value.pop(field_widths[width_index], from_low_bit=False)
@@ -816,6 +828,20 @@ class Bits:
 
     def __ge__(self, other: object) -> bool:
         return not self.__lt__(other)
+
+
+class Field(Bits):
+    def __init__(
+        self, value: BitsInitValue, width: int | None = None, name: str | None = None
+    ) -> None:
+        super().__init__(value, width)
+        self.name = name
+
+
+class Register:
+    def __init__(self, *fields: Field, name: str | None = None) -> None:
+        self.fields = fields
+        self.name = name
 
 
 class Binary:

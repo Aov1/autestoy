@@ -149,6 +149,9 @@ def test_Bits_init():
     assert t.value == 0b1111_1010_1111_0000
     assert t.width == 16
 
+    t = Bits([(0x1234, 16), ("0x5678", 16)])
+    assert t.value == 0x12345678
+
     print("Bits.__init__() ok")
 
 

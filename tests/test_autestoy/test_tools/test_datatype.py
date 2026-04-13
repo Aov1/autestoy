@@ -283,6 +283,10 @@ def test_Bits___setitem__():
     t[:3] = 1  # Bits(0x1000_0011, 32)
     assert t.value == 0x1000_0011
 
+    t = Bits(0x0000_0000, 32)
+    t[0:, 1, 2:, 3, 11:8, 0:7] = 0xFFFFFFFF
+    assert t.value == 0xFF00_0F0F
+
 
 def test_Bits_split_iter():
     t = Bits(0x1234_5678, 32)
@@ -331,3 +335,47 @@ def test_Bits_split_iter():
     assert next(it) == Bits("0b1_u1")
     with pytest.raises(StopIteration):
         next(it)
+
+
+def test_Bits_remove():
+    t = Bits(0x12345678, 32)
+    rm = t.remove((4, 15))
+    assert rm == Bits(0x234, 12)
+    assert t == Bits(0x15678, 20)
+
+    t = Bits(0b1111_1101_1111_0000, 16)
+    rm = t.remove(9)
+    assert rm == Bits(0, 1)
+    assert t == Bits(0b1111_111_1111_0000, 15)
+
+    t = Bits(0x12345678, 32)
+    rm = t.remove((0, 15))
+    assert rm == Bits(0x1234, 16)
+    assert t == Bits(0x5678, 16)
+
+
+def test_Bits_pop():
+    t = Bits(0x12345678, 32)
+    pop = t.pop(16)
+    assert pop == Bits(0x5678, 16)
+    assert t == Bits(0x1234, 16)
+
+    t = Bits(0x12345678, 32)
+    pop = t.pop(8, from_low_bit=False)
+    assert pop == Bits(0x12, 8)
+    assert t == Bits(0x345678, 24)
+
+
+def test_Bits_append():
+    t = Bits(0x1234, 16)
+    t.append(Bits(0x5678, 16))
+    assert t == Bits(0x12345678, 32)
+
+    t = Bits(0x1, 4)
+    t.append(Bits(0x2, 4), Bits(0x3, 4))
+    assert t == Bits(0x123, 12)
+
+
+def test_Bits_concat():
+    res = Bits(0x1234, 16).concat(Bits(0x5678, 16))
+    assert res == Bits(0x12345678, 32)

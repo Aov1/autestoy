@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Iterable, Iterator, Literal, overload
+from typing import Iterable, Iterator, Literal, Self, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -296,6 +296,16 @@ class Bits:
         cls._one_line_max_width = one_line_max_width
 
     @overload
+    def __init__(self, value: bool, width: int) -> None:
+        """当value为bool时，width用于指定宽度，相当于将True值转换为1、False转换为0"""
+        ...
+
+    @overload
+    def __init__(self, value: bool) -> None:
+        """当value为bool且没有width参数时，相当于将True值转换为0b1、False转换为0b0，宽度都为1"""
+        ...
+
+    @overload
     def __init__(self, value: int, width: int) -> None:
         """
         当value为int时必须指定宽度\n
@@ -339,13 +349,16 @@ class Bits:
         ...
 
     def __init__(
-        self, value: int | str | Bits | Iterable, width: int | None = None
+        self, value: int | str | Bits | Iterable | bool, width: int | None = None
     ) -> None:
         self._width: int
         self._value: int
 
+        if isinstance(value, bool):
+            self._width = 1 if width is None else width
+            self._value = 1 if value else 0
         # value:int && width:int
-        if isinstance(value, int) and isinstance(width, int):
+        elif isinstance(value, int) and isinstance(width, int):
             if value < 0 or width <= 0:
                 raise ValueError(f"Invalid negative integer: {value} or {width}")
             self._width = width
@@ -540,7 +553,11 @@ class Bits:
             return (width_high, value_high), (width_low, value_low)
 
     def split_iter(
-        self, group_width: int, right_align: bool = True, from_left: bool = True
+        self,
+        group_width: int,
+        right_align: bool = True,
+        from_left: bool = True,
+        times: int = -1,
     ) -> Iterator[Bits]:
         """将Bits类的值按照group_width分割为多个Bits类，返回一个迭代器"""
         if group_width < 1 or group_width > self.width:
@@ -584,6 +601,46 @@ class Bits:
         """
         return list(self.split_iter(group_width))
 
+    def concat(self, other: Bits) -> Bits:
+        """拼接两个Bits类，返回一个新的Bits类"""
+        return Bits((self.value << other.width) | other.value, self.width + other.width)
+
+    def append(self, *other: Bits | Iterable[Bits]) -> Self:
+        """在当前Bits类的末尾拼接另一些Bits类"""
+        for e in other:
+            if isinstance(e, Bits):
+                self.width += e.width
+                self.value = (self.value << e.width) | e.value
+            elif isinstance(e, Iterable):
+                for ee in e:
+                    self.append(ee)
+        return self
+
+    def pop(self, width: int, from_low_bit: bool = True) -> Bits:
+        """从当前Bits类的末尾(默认低位)弹出指定宽度的值，以新的Bits类返回弹出的值"""
+        if width >= self.width:
+            raise ValueError(
+                f"width {width} is too large for Bits of width {self.width}"
+            )
+        if from_low_bit:
+            pop_value = self[width - 1 : 0]
+            self.value >>= width
+        else:
+            pop_value = self[0 : width - 1]
+            self.value &= max_value(self.width - width)
+        self.width -= width
+        return pop_value
+
+    def remove(self, brange: tuple[int, int] | int) -> Bits:
+        """从当前Bits类中移除指定范围的值，剩余范围拼接"""
+        (high_width, high_value), (low_width, low_value) = self._split_range(brange)
+        rm_bits = (
+            self[brange[0] : brange[1]] if isinstance(brange, tuple) else self[brange]
+        )
+        self.width = high_width + low_width
+        self.value = (high_value << low_width) | low_value
+        return rm_bits
+
     def set_bits(
         self, range: tuple[int, int] | int, value: int | str | Bits | bool
     ) -> None:
@@ -622,6 +679,17 @@ class Bits:
             | value_low
         )
 
+    @overload
+    def __setitem__(self, key: int, value: int | str | Bits | bool) -> None: ...
+
+    @overload
+    def __setitem__(self, key: slice, value: int | str | Bits | bool) -> None: ...
+
+    @overload
+    def __setitem__(
+        self, key: Iterable[int | slice], value: int | str | Bits | bool
+    ) -> None: ...
+
     def __setitem__(
         self, key: int | slice | Iterable[int | slice], value: int | str | Bits | bool
     ) -> None:
@@ -650,11 +718,57 @@ class Bits:
                 self.set_bits(st, value)
             elif isinstance(ed, int) and st is None:
                 self.set_bits(self.width - 1 - ed, value)
-        elif isinstance(key, Iterable):
-            # need split_bits
+        elif isinstance(key, Iterable):  # 混合赋值，用于一次性设置多位
+            field_widths: list[int] = []
             for k in key:
                 if isinstance(k, int):
-                    pass
+                    field_widths.append(1)
+                elif isinstance(k, slice):
+                    st, ed, exp = k.start, k.stop, k.step
+                    if exp is not None:
+                        raise ValueError("step is not supported")
+                    if isinstance(st, int) and isinstance(ed, int):
+                        field_widths.append(abs(st - ed) + 1)
+                    elif isinstance(st, int) and ed is None:
+                        field_widths.append(1)
+                    elif isinstance(ed, int) and st is None:
+                        field_widths.append(1)
+            all_width = sum(field_widths) + 1  # pop无法超过Bits宽度
+            set_value = Bits(value, all_width)
+            width_index = 0
+            for k in key:
+                print(self)
+                if isinstance(k, int):
+                    self.set_bits(
+                        k, set_value.pop(field_widths[width_index], from_low_bit=False)
+                    )
+                    width_index += 1
+                elif isinstance(k, slice):
+                    st, ed = k.start, k.stop
+                    if isinstance(st, int) and isinstance(ed, int):
+                        self.set_bits(
+                            (st, ed),
+                            set_value.pop(
+                                field_widths[width_index], from_low_bit=False
+                            ),
+                        )
+                        width_index += 1
+                    elif isinstance(st, int) and ed is None:
+                        self.set_bits(
+                            st,
+                            set_value.pop(
+                                field_widths[width_index], from_low_bit=False
+                            ),
+                        )
+                        width_index += 1
+                    elif isinstance(ed, int) and st is None:
+                        self.set_bits(
+                            self.width - 1 - ed,
+                            set_value.pop(
+                                field_widths[width_index], from_low_bit=False
+                            ),
+                        )
+                        width_index += 1
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Bits):

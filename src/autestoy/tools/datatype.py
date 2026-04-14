@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+import random
 import re
 import warnings
-from typing import Iterable, Iterator, Literal, Self, Union, overload
+from types import MethodType
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Literal,
+    Self,
+    Union,
+    overload,
+    override,
+)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -169,7 +181,7 @@ def str2int(value: str) -> tuple[int, int]:
     """str2num的缩窄，float转换为int如果值不一致，则raise"""
     gwidth, gvalue = str2num(value)
     gvalue = to_int(gvalue)
-    if not gvalue:
+    if gvalue is None:
         raise ValueError(f"Invalid float string: {value} != int({value})")
     return gwidth, gvalue
 
@@ -248,9 +260,14 @@ def fmt_in_base(
         raise ValueError(f"{base = } not in [2,8,10,16]")
 
 
-BitsInitValue = Union[
-    bool, int, str, "Bits", Iterable[tuple[int | str, int] | str | "Bits"]
-]
+def rand_Bits(start: int, end: int, width: int) -> Bits:
+    """随即生成一个Bits实例"""
+    return Bits(random.randint(start, end), width)
+
+
+type BitsInitValue = (
+    bool | int | str | "Bits" | Iterable[tuple[int | str, int] | str | "Bits"]
+)
 
 
 class Bits:
@@ -445,6 +462,20 @@ class Bits:
         self._width = width
         self.fix_value()
 
+    def _get_value(self, brange: tuple[int, int] | int) -> int:
+        if isinstance(brange, int):
+            return (self.value >> brange) % 2
+        elif isinstance(brange, tuple):
+            st, ed = brange
+            if st == ed:
+                return self._get_value(st)
+            elif st > ed:
+                return (self.value >> ed) & max_value(st - ed + 1)
+            else:
+                return (self.value >> (self.width - 1 - ed)) & max_value(ed - st + 1)
+        else:
+            raise TypeError(f"Unsupported type: {type(brange)}")
+
     @overload
     def __getitem__(self, key: int) -> Bits:
         """获取一位，返回Bits(value=[0 or 1] , width=1 )"""
@@ -488,6 +519,8 @@ class Bits:
                 return self[st]
             elif isinstance(ed, int) and st is None:
                 return Bits(self.value >> (self.width - 1 - ed) & 1, 1)
+            elif st is None and ed is None:
+                return Bits(self)
             else:
                 raise TypeError("Bits slice start and stop must be integers or None")
 
@@ -731,6 +764,10 @@ class Bits:
                 self.set_bits(st, value)
             elif isinstance(ed, int) and st is None:
                 self.set_bits(self.width - 1 - ed, value)
+            elif st is None and ed is None:
+                self.set_bits((self.width - 1, 0), value)
+            else:
+                raise TypeError(f"Unsupported key type: {type(key)}")
         elif isinstance(key, Iterable):  # 混合赋值，用于一次性设置多位
             field_widths: list[int] = []
             for k in key:
@@ -783,6 +820,7 @@ class Bits:
                         width_index += 1
 
     def __eq__(self, other: object) -> bool:
+        # self.fix_value()
         if isinstance(other, Bits):
             return self.value == other.value and self.width == other.width
         elif isinstance(other, tuple) and len(other) == 2:
@@ -829,19 +867,164 @@ class Bits:
     def __ge__(self, other: object) -> bool:
         return not self.__lt__(other)
 
+    def borrow(self, brange: tuple[int, int] | int | None) -> BitView:
+        """返回一个新的BitView实例，是本身Bits的范围借用"""
+        return BitView(self, brange)
 
-class Field(Bits):
+
+class BitView(Bits):
+    """用于对Bits类实例的借用，实质上是维护了一个指向Bits的指针和范围，作出异步读取与修改\n
+    即仅在读取BitView实例的value时才会从master更新数据，以及设置value时同步向master修改数据"""
+
+    def __init__(self, master: Bits, brange: tuple[int, int] | int | None) -> None:
+        """parm `master`： 借用的原始Bits实例\n
+        parm `brange`：要借用的范围，int时是右对齐的单个位，(int,int)时是包括边界的切片范围，None时是整个master的范围\n
+        """
+
+        self.master: Bits = master
+        self.master_id = id(self.master)
+        self.brange: tuple[int, int]
+        if isinstance(brange, int):
+            self.brange = (brange, brange)
+            tmp_value = self.master._get_value(self.brange)
+            tmp_width = 1
+        elif isinstance(brange, tuple):
+            self.brange = brange
+            tmp_value = self.master._get_value(self.brange)
+            tmp_width = abs(brange[0] - brange[1]) + 1
+        elif brange is None:
+            self.brange = (0, self.master.width - 1)
+            tmp_value = self.master.value
+            tmp_width = self.master.width
+        else:
+            raise TypeError(f"unsupported type: {type(brange)}")
+        super().__init__(tmp_value, tmp_width)
+
+    @property
+    def value(self) -> int:
+        self._value = self.master._get_value(self.brange)
+        return self._value
+
+    @value.setter
+    def value(self, value: int) -> None:
+        self._value = value
+        self.fix_value()
+        self.master.set_bits(self.brange, self._value)
+
+
+class Addr32(Bits):
     def __init__(
-        self, value: BitsInitValue, width: int | None = None, name: str | None = None
+        self,
+        address: BitsInitValue,
+        read_method: Callable | None = None,
+        write_method: Callable | None = None,
+    ):
+        super().__init__(address, 32)
+
+
+class Addr64(Bits):
+    def __init__(self, address: BitsInitValue):
+        super().__init__(address, 64)
+
+    @override
+    def split(self, group_width: int = 32) -> list[Addr32 | Bits]:  # type: ignore
+        """Addr64覆盖了split，提供了默认分割值32，并返回Addr32\n
+        分割宽度非32时依旧返回Bits类"""
+        if group_width != 32:
+            return super().split(group_width)
+        high, low = super().split(group_width)
+        return [Addr32(high), Addr32(low)]
+
+
+class Field(BitView):
+    def __init__(
+        self,
+        master: Bits,
+        name: str,
+        brange: tuple[int, int] | int,
+        default_value: BitsInitValue | None = None,
     ) -> None:
-        super().__init__(value, width)
-        self.name = name
+        self.master: Bits = master
+        self.name: str = name
+        self.field_brange: tuple[int, int] = (
+            brange if isinstance(brange, tuple) else (brange, brange)
+        )
+        self.field_width: int = self.field_brange[1] - self.field_brange[0] + 1
+        self.default_value: Bits | None = (
+            Bits(default_value, self.field_width) if default_value is not None else None
+        )
+        super().__init__(self.master, self.field_brange)
+
+    # def link_owner(self, reg: Register):
+    #     if any(self.field_brange) >= reg.value.width:
+    #         raise IndexError(
+    #             f"Field {self.name} range {self.field_brange} exceeds register width {reg.value.width}"
+    #         )
+    # self.link_master(reg.value, self.field_brange)
 
 
 class Register:
-    def __init__(self, *fields: Field, name: str | None = None) -> None:
-        self.fields = fields
-        self.name = name
+    def __init__(
+        self,
+        address: Addr32 | Addr64,
+        name: str | None = None,
+        value_width: int = 32,
+        read_method: Callable | None = None,
+        write_method: Callable | None = None,
+    ) -> None:
+        self.address: Addr32 | Addr64 = address
+        self.name: str | None = name
+        self.bits_width: int = value_width
+        self.bits: Bits = Bits(0, value_width)
+        self.fields: dict[str, Field] = {}
+        self.bitmap = Bits(0, value_width)
+        self.read_method: Callable | None = (
+            None if read_method is None else self.config_read_method(read_method)
+        )
+        self.write_method: Callable | None = (
+            None if write_method is None else self.config_write_method(write_method)
+        )
+
+    def add_field(
+        self,
+        name: str,
+        brange: tuple[int, int] | int,
+        default_value: BitsInitValue | None = None,
+    ) -> None:
+        if self._is_field_overlap(brange):
+            raise ValueError(f"Field {name} overlaps with existing field")
+        field = Field(self.bits, name, brange, default_value)
+        self.fields[field.name] = field
+        st, ed = brange if isinstance(brange, tuple) else (brange, brange)
+        self.bitmap[st:ed] = max_value(field.width)
+
+    def _is_field_overlap(self, brange: tuple[int, int] | int) -> bool:
+        return (
+            self.bitmap[brange[0] : brange[1]]
+            if isinstance(brange, tuple)
+            else self.bitmap[brange]
+        ) != 0
+
+    def __getattr__(self, name: str) -> Field:
+        if res := self.fields.get(name):
+            return res
+        raise AttributeError(f"'Register' object has no attribute '{name}'")
+
+    def config_read_method(self, func: Callable) -> None:
+        self.read_method = MethodType(func, self)
+
+    def config_write_method(self, func: Callable) -> None:
+        self.write_method = MethodType(func, self)
+
+    def read(self, *args, **kwargs) -> Any:
+        if self.read_method is None:
+            raise NotImplementedError("read_method is not configured")
+        return self.read_method(*args, **kwargs)
+
+    def write(self, value: int, *args, **kwargs) -> None:
+        if self.write_method is None:
+            raise NotImplementedError("write_method is not configured")
+        self.write_method(value, *args, **kwargs)
 
 
 class Binary:

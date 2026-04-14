@@ -2,10 +2,16 @@ import numpy as np
 import pytest
 
 from autestoy.tools.datatype import (
+    Addr32,
+    Addr64,
     Bits,
+    BitView,
+    Field,
+    Register,
     fmt_in_base,
     insert_every_n,
     num2bytes,
+    rand_Bits,
     str2num,
     width_in_base,
 )
@@ -382,3 +388,83 @@ def test_Bits_append():
 def test_Bits_concat():
     res = Bits(0x1234, 16).concat(Bits(0x5678, 16))
     assert res == Bits(0x12345678, 32)
+
+
+def test_Bits_get_value():
+    t = Bits(0x12345678, 32)
+    assert t._get_value(0) == 0x0
+    assert t._get_value(3) == 1
+    assert t._get_value((3, 0)) == 8
+    assert t._get_value((0, 15)) == 0x1234
+
+
+def test_BitView():
+    t = Bits(0x12345678, 32)
+    v = BitView(t, (0, 15))
+    assert v == Bits(0x1234, 16)
+    v.value = 0x5678
+    assert t == Bits(0x56785678, 32)
+    assert v == Bits(0x5678, 16)
+    t.value = 0xFFFFFFFF
+    assert v == Bits(0xFFFF, 16)
+    # t.borrow((0, 15))
+
+
+def test_Addr32():
+    addr = Addr32(0x12345678)
+    assert addr == Bits(0x12345678, 32)
+    high16 = addr.borrow((0, 15))
+    assert high16 == 0x1234
+
+
+def test_Addr64():
+    addr = Addr64(0x12345678_90ABCDEF)
+    assert addr == Bits(0x12345678_90ABCDEF, 64)
+    assert addr.split() == [Bits(0x12345678, 32), Bits(0x90ABCDEF, 32)]
+
+
+def test_Field():
+    t = Bits(0x12345678, 32)
+    data_h = Field(t, "DATA_H", (0, 15), 0xFFFF)
+    data_l = Field(t, "DATA_L", (16, 31), "0x0000_u16")
+    assert data_h.default_value == Bits(0xFFFF, 16)
+    assert data_l.default_value == Bits(0x0000, 16)
+
+
+def test_Register():
+    address = Addr32(0x12345678)
+    reg = Register(address)
+    reg.add_field("DATA_H", (0, 15), 0xFFFF)
+    reg.add_field("DATA_L", (16, 31), "0x0000_i16")
+    assert reg.address == address
+    assert reg.bits == Bits(0x0, 32)
+    assert reg.DATA_H == Bits(0x0, 16)
+    assert reg.DATA_L == Bits(0x0, 16)
+
+    reg.bits[:] = Bits(0x12345678, 32)
+    assert reg.bits.value == 0x12345678
+    reg.DATA_H[:] = 0x1234
+    reg.DATA_L[:] = "0x5678_u16"
+    assert reg.DATA_H == Bits(0x1234, 16)
+    assert reg.DATA_L == Bits(0x5678, 16)
+
+    reg.config_read_method(register_read)
+    reg.config_write_method(register_write)
+    reg.read()
+    print(f"{reg.bits = }")
+    reg.write(0x5678_ABCD)
+    print(f"{reg.bits = }")
+    for e in reg.fields:
+        print(f"{e = }")
+    assert reg.DATA_H == Bits(0x5678, 16)
+    assert reg.DATA_L == Bits(0xABCD, 16)
+    assert reg.bits == Bits(0x5678_ABCD, 32)
+
+
+def register_read(self: Register):
+    self.bits[:] = rand_Bits(0x0, 0xFFFFFFFF, 32)
+    return self.bits
+
+
+def register_write(self: Register, value):
+    self.bits[:] = value

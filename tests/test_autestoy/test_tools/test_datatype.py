@@ -460,6 +460,11 @@ def test_Register():
     assert reg.DATA_L == Bits(0xABCD, 16)
     assert reg.bits == Bits(0x5678_ABCD, 32)
 
+    reg.DATA_H.add_enum("MAX", 0xFFFF, "Maximum value")
+    reg.DATA_H.select_enum("MAX")
+    assert reg.DATA_H == Bits(0xFFFF, 16)
+    assert reg.bits == Bits(0xFFFF_ABCD, 32)
+
 
 def register_read(self: Register):
     self.bits[:] = rand_Bits(0x0, 0xFFFFFFFF, 32)

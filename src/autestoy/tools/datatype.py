@@ -284,6 +284,7 @@ class Bits:
 
     @classmethod
     def set_verilog_like(cls, verilog_like: bool) -> None:
+        """设置默认显示格式是否使用近似varilog的语法"""
         cls._verilog_like_type = verilog_like
 
     @classmethod
@@ -295,6 +296,7 @@ class Bits:
         width_in_base_10: int = 4,
         width_in_base_16: int = 4,
     ) -> None:
+        """设置默认显示格式的数字分隔符和宽度"""
         cls._digit_separator_type = digit_separator
         cls._digit_separator_width_in_base_2 = width_in_base_2
         cls._digit_separator_width_in_base_8 = width_in_base_8
@@ -303,14 +305,17 @@ class Bits:
 
     @classmethod
     def set_upper_base_symbol(cls, upper_base_symbol: bool) -> None:
+        """设置默认显示格式的进制符号是否大写"""
         cls._upper_base_symbol = upper_base_symbol
 
     @classmethod
     def set_upper_hex_digits(cls, upper_hex_digits: bool) -> None:
+        """设置默认显示格式的十六进制数字是否大写"""
         cls._upper_hex_digits = upper_hex_digits
 
     @classmethod
     def set_str_type(cls, to_str_type: Literal[2, 8, 10, 16]) -> None:
+        """设置默认显示格式的进制类型"""
         cls._to_str_type = to_str_type
 
     @classmethod
@@ -463,6 +468,7 @@ class Bits:
         self.fix_value()
 
     def _get_value(self, brange: tuple[int, int] | int) -> int:
+        """获取维护的value的部分值"""
         if isinstance(brange, int):
             return (self.value >> brange) % 2
         elif isinstance(brange, tuple):
@@ -943,6 +949,7 @@ class Field(BitView):
         name: str,
         brange: tuple[int, int] | int,
         default_value: BitsInitValue | None = None,
+        info: str = "",
     ) -> None:
         self.master: Bits = master
         self.name: str = name
@@ -953,14 +960,20 @@ class Field(BitView):
         self.default_value: Bits | None = (
             Bits(default_value, self.field_width) if default_value is not None else None
         )
+        self.enums: dict[str, dict[str, Any]] = {}
+        self.info: str = info
         super().__init__(self.master, self.field_brange)
 
-    # def link_owner(self, reg: Register):
-    #     if any(self.field_brange) >= reg.value.width:
-    #         raise IndexError(
-    #             f"Field {self.name} range {self.field_brange} exceeds register width {reg.value.width}"
-    #         )
-    # self.link_master(reg.value, self.field_brange)
+    def add_enum(self, name: str, value: int | Bits | bool | str, info: str = ""):
+        self.enums[name] = {
+            "value": Bits(value, self.field_width),
+            "info": info,
+        }
+
+    def select_enum(self, name: str) -> None:
+        if name not in self.enums:
+            raise ValueError(f"Enum {name} not found")
+        self.value = self.enums[name]["value"].value
 
 
 class Register:
@@ -1027,6 +1040,6 @@ class Register:
         self.write_method(value, *args, **kwargs)
 
 
-class Binary:
-    def __init__(self, value: int | str | Bits, force_width: int = 32) -> None:
+class Packet:
+    def __init__(self, ) -> None:
         pass

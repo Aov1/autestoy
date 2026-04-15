@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from numpy._typing import _16Bit
 
 from autestoy.tools.datatype import (
     Addr32,
@@ -205,6 +206,9 @@ def test_Bits_fix():
     assert str(t) == "0x0000000087654321"
     t.width = 8
     assert str(t) == "0x21"
+    t.width = 0
+    assert str(t) == "0x0"
+    print(t, f"{t = }")
 
 
 def test_Bits__split_range():
@@ -351,6 +355,9 @@ def test_Bits_remove():
     rm = t.remove((4, 15))
     assert rm == Bits(0x234, 12)
     assert t == Bits(0x15678, 20)
+    rm = t.remove((0, 19))
+    assert rm == Bits(0x15678, 20)
+    assert t == Bits(None)
 
     t = Bits(0b1111_1101_1111_0000, 16)
     rm = t.remove(9)
@@ -374,6 +381,11 @@ def test_Bits_pop():
     assert pop == Bits(0x12, 8)
     assert t == Bits(0x345678, 24)
 
+    t = Bits(0x1234, 16)
+    pop = t.pop(16)
+    assert t == Bits(None)
+    assert pop == 0x1234
+
 
 def test_Bits_append():
     t = Bits(0x1234, 16)
@@ -396,6 +408,60 @@ def test_Bits_get_value():
     assert t._get_value(3) == 1
     assert t._get_value((3, 0)) == 8
     assert t._get_value((0, 15)) == 0x1234
+
+
+def test_Bits_add():
+    t = Bits(100, 32)
+    assert t + 100 == Bits(200, 32)
+    assert t + "100" == Bits(200, 32)
+    assert t + Bits(100, 32) == Bits(200, 32)
+    assert t + None == t
+
+    # assert 100 + t == Bits(200, 32) not supported because int dont have width
+    assert "100_u32" + t == Bits(200, 32)
+    assert None + t == t
+    t += Bits(100, 32)
+    assert t == Bits(200, 32)
+    t += 100
+    assert t == Bits(300, 32)
+    t += "100"
+    assert t == Bits(400, 32)
+    t += None
+    assert t == Bits(400, 32)
+
+    t = Bits(100, 32)
+    assert "200_u8" + t == Bits(300 - 256, 8)
+
+
+def test_Bits_sub():
+    t = Bits(200, 32)
+    assert t - 100 == Bits(100, 32)
+    assert t - "100" == Bits(100, 32)
+    assert t - Bits(100, 32) == Bits(100, 32)
+
+    t = Bits(100, 32)
+    assert "200_u8" - t == Bits(100, 8)
+    assert "200_u32" - t == Bits(100, 32)
+    assert None - t == 0
+
+    t = Bits(200, 32)
+    t -= 50
+    assert t == Bits(150, 32)
+    t -= "50"
+    assert t == Bits(100, 32)
+    t -= None
+    assert t == Bits(100, 32)
+
+
+def test_Bits_shift():
+    t = Bits(0x12345678, 32)
+    assert t << 4 == Bits(0x2345_6780, 32)
+    assert t >> 4 == Bits(0x0123_4567, 32)
+    assert t << 4 >> 4 == Bits(0x0234_5678, 32)
+    t <<= 4
+    assert t == Bits(0x2345_6780, 32)
+    t >>= 16
+    assert t == Bits(0x2345, 32)
 
 
 def test_BitView():

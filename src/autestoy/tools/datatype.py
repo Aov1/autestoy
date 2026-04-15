@@ -11,7 +11,6 @@ from typing import (
     Iterator,
     Literal,
     Self,
-    Union,
     overload,
     override,
 )
@@ -265,8 +264,16 @@ def rand_Bits(start: int, end: int, width: int) -> Bits:
     return Bits(random.randint(start, end), width)
 
 
+def limit_sub(a: int, b: int, width: int) -> int:
+    """限制两个数的差在width范围内，越界循环"""
+    a = a & max_value(width)
+    b = b & max_value(width)
+    tmp = a - b
+    return tmp if tmp >= 0 else tmp + max_value(width) + 1
+
+
 type BitsInitValue = (
-    bool | int | str | "Bits" | Iterable[tuple[int | str, int] | str | "Bits"]
+    None | bool | int | str | "Bits" | Iterable[tuple[int | str, int] | str | "Bits"]
 )
 
 
@@ -330,12 +337,15 @@ class Bits:
         self._width: int
         self._value: int
 
-        if isinstance(value, bool):
+        if value is None:
+            self._width = 0
+            self._value = 0
+        elif isinstance(value, bool):
             self._width = 1 if width is None else width
             self._value = 1 if value else 0
         # value:int && width:int
         elif isinstance(value, int) and isinstance(width, int):
-            if value < 0 or width <= 0:
+            if value < 0 or width < 0:
                 raise ValueError(f"Invalid negative integer: {value} or {width}")
             self._width = width
             self._value = value & ((1 << width) - 1)
@@ -403,13 +413,13 @@ class Bits:
 
     @property
     def width(self) -> int:
-        if self._width < 1:
-            self._value = 1
+        if self._width < 0:
+            self._width = 0
         return self._width
 
     @width.setter
     def width(self, width: int) -> None:
-        if width < 1:
+        if width < 0:
             raise ValueError("width must be greater than 0")
         self._width = width
         self.fix_value()
@@ -617,7 +627,7 @@ class Bits:
 
     def pop(self, width: int, from_low_bit: bool = True) -> Bits:
         """从当前Bits类的末尾(默认低位)弹出指定宽度的值，以新的Bits类返回弹出的值"""
-        if width >= self.width:
+        if width > self.width:
             raise ValueError(
                 f"width {width} is too large for Bits of width {self.width}"
             )
@@ -784,6 +794,8 @@ class Bits:
             return self.value == other
         elif isinstance(other, bool):
             return self.value != 0
+        elif other is None:
+            return self.width == 0 and self.value == 0
         else:
             raise TypeError(f"unsupported type: {type(other)}")
 
@@ -823,6 +835,118 @@ class Bits:
     def borrow(self, brange: tuple[int, int] | int | None) -> BitView:
         """返回一个新的BitView实例，是本身Bits的范围借用"""
         return BitView(self, brange)
+
+    def __add__(self, obj: BitsInitValue | tuple[int | str, int]) -> Bits:
+        if obj is None:
+            return Bits(self)
+        elif isinstance(obj, Bits):
+            return Bits(self.value + obj.value, self.width)
+        elif isinstance(obj, bool):
+            return Bits(self.value + int(obj), self.width)
+        elif isinstance(obj, int):
+            return Bits(self.value + obj, self.width)
+        elif isinstance(obj, str):
+            return self.__add__(Bits(obj, self.width))
+        elif isinstance(obj, Iterable):
+            tmp = Bits(self)
+            for e in obj:
+                if isinstance(e, (int, str, Bits, bool)):
+                    tmp = tmp + e
+                else:
+                    raise TypeError(f"Bits.__add__ Unsupported type: {type(obj)}")
+            return tmp
+        else:
+            raise TypeError(f"Bits.__add__ Unsupported type: {type(obj)}")
+
+    def __sub__(self, obj: BitsInitValue) -> Bits:
+        if obj is None:
+            return Bits(self)
+        elif isinstance(obj, Bits):
+            return Bits(limit_sub(self.value, obj.value, self.width), self.width)
+        elif isinstance(obj, bool):
+            return Bits(limit_sub(self.value, int(obj), self.width), self.width)
+        elif isinstance(obj, int):
+            return Bits(limit_sub(self.value, obj, self.width), self.width)
+        elif isinstance(obj, str):
+            return self.__sub__(Bits(obj, self.width))
+        elif isinstance(obj, Iterable):
+            tmp = Bits(self)
+            for e in obj:
+                if isinstance(e, (int, str, Bits, bool)):
+                    tmp = tmp - e
+                else:
+                    raise TypeError(f"Bits.__sub__ Unsupported type: {type(obj)}")
+            return tmp
+        else:
+            raise TypeError(f"Bits.__sub__ Unsupported type: {type(obj)}")
+
+    def __iadd__(self, other: int | str | Bits | bool | None) -> Self:
+        """支持 += 运算符的原地加法"""
+        if isinstance(other, (int, str, Bits, bool)):
+            self.value = (Bits(self) + other).value
+            return self
+        elif other is None:
+            return self
+        else:
+            raise TypeError(f"Bits.__iadd__ Unsupported type: {type(other)}")
+
+    def __isub__(self, other: int | str | Bits | bool | None) -> Self:
+        """支持 -= 运算符的原地减法"""
+        if isinstance(other, (int, str, Bits, bool)):
+            self.value = (Bits(self) - other).value
+            return self
+        elif other is None:
+            return self
+        else:
+            raise TypeError(f"Bits.__isub__ Unsupported type: {type(other)}")
+
+    def __radd__(self, other: int | str | Bits | bool | None) -> Bits:
+        """支持 + 运算符的右向加法"""
+        if isinstance(other, (int, str, Bits, bool)):
+            return Bits(other) + self
+        elif other is None:
+            return self
+        else:
+            raise TypeError(f"Bits.__radd__ Unsupported type: {type(other)}")
+
+    def __rsub__(self, other: int | str | Bits | bool | None) -> Bits:
+        """支持 - 运算符的右向减法"""
+        if isinstance(other, (int, str, Bits, bool)):
+            return Bits(other) - self
+        elif other is None:
+            return Bits(None) - self
+        else:
+            raise TypeError(f"Bits.__rsub__ Unsupported type: {type(other)}")
+
+    def __rshift__(self, other: int) -> Bits:
+        """支持 >> 运算符的右向移位"""
+        if isinstance(other, int):
+            return Bits(self.value >> other, self.width)
+        else:
+            raise TypeError(f"Bits.__rshift__ Unsupported type: {type(other)}")
+
+    def __lshift__(self, other: int) -> Bits:
+        """支持 << 运算符的左向移位"""
+        if isinstance(other, int):
+            return Bits(self.value << other, self.width)
+        else:
+            raise TypeError(f"Bits.__lshift__ Unsupported type: {type(other)}")
+
+    def __irshift__(self, other: int) -> Self:
+        """支持 >> 运算符的右向移位"""
+        if isinstance(other, int):
+            self.value = self.value >> other
+            return self
+        else:
+            raise TypeError(f"Bits.__rshift__ Unsupported type: {type(other)}")
+
+    def __ilshift__(self, other: int) -> Self:
+        """支持 << 运算符的左向移位"""
+        if isinstance(other, int):
+            self.value = self.value << other
+            return self
+        else:
+            raise TypeError(f"Bits.__lshift__ Unsupported type: {type(other)}")
 
 
 class BitView(Bits):

@@ -464,6 +464,48 @@ def test_Bits_shift():
     assert t == Bits(0x2345, 32)
 
 
+def test_Bits_and():
+    t = Bits(0b1111_0000, 8)
+    assert t & Bits(0, 4) == Bits(0b0000_0000, 8)
+    assert t & 0b0000_1111 == Bits(0b0000_0000, 8)
+    assert t & 0b0101_0000 == 0b0101_0000
+    assert t & "8'b1100_1111" == "0b1100_0000_u8"
+    assert "8'b1100_0000" & t == "0b1100_0000_u8"
+    assert "4'b1111" & t == Bits(0, 4)
+    assert Bits(0b1111_1111, 8) & t == Bits(0b1111_0000, 8)
+    t &= 0x80
+    assert t == Bits(0x80, 8)
+
+
+def test_Bits_or():
+    t = Bits(0b1100_0011, 8)
+    assert t | Bits(0b0011_0000, 8) == Bits(0b1111_0011, 8)
+    assert t | 0xF8 == Bits(0b1111_1011, 8)
+    assert t | "32'hFF" == Bits(0b1111_1111, 8)
+    assert Bits("32'hff") | t == Bits(0b1111_1111, 32)
+    assert "16'b1100" | t == Bits(0b1100_1111, 16)
+    t |= 0x08
+    assert t == Bits(0b1100_1011, 8)
+
+
+def test_Bits_xor():
+    t = Bits(0b1001, 4)
+    assert t ^ Bits(0b0101, 4) == Bits(0b1100, 4)
+    assert t ^ 0b0101 == Bits(0b1100, 4)
+    assert t ^ "4'b0101" == Bits(0b1100, 4)
+    assert Bits(0b1100, 4) ^ t == Bits(0b0101, 4)
+    assert "5'b11111" ^ t == Bits(0b10110, 5)
+    t ^= 0b1111
+    assert t == Bits(0b0110, 4)
+
+
+def test_Bits_invert():
+    t = Bits(0b1010, 4)
+    assert ~t == Bits(0b0101, 4)
+    t.invert()
+    assert t == Bits(0b0101, 4)
+
+
 def test_BitView():
     t = Bits(0x12345678, 32)
     v = BitView(t, (0, 15))

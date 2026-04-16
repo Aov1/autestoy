@@ -272,6 +272,10 @@ def limit_sub(a: int, b: int, width: int) -> int:
     return tmp if tmp >= 0 else tmp + max_value(width) + 1
 
 
+def invert_bits(value: int, width: int) -> int:
+    return value & max_value(width) ^ max_value(width)
+
+
 type BitsInitValue = (
     None | bool | int | str | "Bits" | Iterable[tuple[int | str, int] | str | "Bits"]
 )
@@ -947,6 +951,65 @@ class Bits:
             return self
         else:
             raise TypeError(f"Bits.__lshift__ Unsupported type: {type(other)}")
+
+    def __or__(self, other: Bits | int | str | bool) -> Bits:
+        """支持 Bits | other\n
+        值得注意的是，以左侧的位宽为运算基础，右侧运算数支持无位宽表述"""
+        if isinstance(other, Bits):
+            return Bits(self.value | other.value, self.width)
+        elif isinstance(other, int):
+            return Bits(self.value | other, self.width)
+        elif isinstance(other, str):
+            return self | Bits(other)
+        else:
+            raise TypeError(f"Unsupport type: {type(other)}")
+
+    def __ror__(self, other: str | bool) -> Bits:
+        return Bits(other) | self
+
+    def __ior__(self, other: Bits | int | str | bool) -> Self:
+        self.value = (self | other).value
+        return self
+
+    def __and__(self, other: Bits | int | str | bool) -> Bits:
+        if isinstance(other, Bits):
+            return Bits(self.value & other.value, self.width)
+        elif isinstance(other, int):
+            return Bits(self.value & other, self.width)
+        elif isinstance(other, str):
+            return self & Bits(other)
+        else:
+            raise TypeError(f"Unsupport type: {type(other)}")
+
+    def __rand__(self, other: str | bool) -> Bits:
+        return Bits(other) & self
+
+    def __iand__(self, other: Bits | int | str | bool) -> Self:
+        self.value = (self & other).value
+        return self
+
+    def __xor__(self, other: Bits | int | str | bool) -> Bits:
+        if isinstance(other, Bits):
+            return Bits(self.value ^ other.value, self.width)
+        elif isinstance(other, int):
+            return Bits(self.value ^ other, self.width)
+        elif isinstance(other, str):
+            return self ^ Bits(other)
+        else:
+            raise TypeError(f"Unsupport type: {type(other)}")
+
+    def __rxor__(self, other: str | bool):
+        return Bits(other) ^ self
+
+    def __ixor__(self, other: Bits | int | str | bool) -> Self:
+        self.value = (self ^ other).value
+        return self
+
+    def __invert__(self) -> Bits:
+        return Bits(invert_bits(self.value, self.width), self.width)
+
+    def invert(self) -> None:
+        self.value = invert_bits(self.value, self.width)
 
 
 class BitView(Bits):

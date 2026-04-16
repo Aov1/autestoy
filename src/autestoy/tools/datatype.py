@@ -273,7 +273,35 @@ def limit_sub(a: int, b: int, width: int) -> int:
 
 
 def invert_bits(value: int, width: int) -> int:
+    """对一个指定宽度的正整数int进行位反转，返回一个正整数int\n
+    内部`~`运算使用"""
+    if value < 0:
+        raise ValueError(f"value {value} < 0")
     return value & max_value(width) ^ max_value(width)
+
+
+def sum_value_Bits(*bits: Bits) -> Bits:
+    """对多个Bits进行求和，取位宽最宽的Bits作为输出位宽\n
+    与直接使用Bits加法进行求和宽度行为不一致，注意\n
+    没有想好可以用在哪"""
+    sum_value = 0
+    max_width = 0
+    for e in bits:
+        sum_value += e.value
+        max_width = max(max_width, e.width)
+    return Bits(sum_value, max_width)
+
+
+def sum_Bits(*bits: Bits) -> Bits:
+    """对多个Bits进行求和，位宽取自第一个参数的位宽\n
+    符合Bits定义的加法规则"""
+    if len(bits) == 1:
+        return Bits(bits[0])
+    else:
+        head = Bits(bits[0])
+        for e in bits[1:]:
+            head += e
+        return head
 
 
 type BitsInitValue = (
@@ -284,10 +312,16 @@ type BitsInitValue = (
 class Bits:
     _one_line_max_width = 64
     _to_str_type: Literal[2, 8, 10, 16] = 16
-    _digit_separator_width_in_base_2: int = 4
-    _digit_separator_width_in_base_8: int = 3
-    _digit_separator_width_in_base_10: int = 4
-    _digit_separator_width_in_base_16: int = 4
+    _digit_separator: dict[int, int] = {
+        2: 4,
+        8: 3,
+        10: 4,
+        16: 4,
+    }
+    # _digit_separator_width_in_base_2: int = 4
+    # _digit_separator_width_in_base_8: int = 3
+    # _digit_separator_width_in_base_10: int = 4
+    # _digit_separator_width_in_base_16: int = 4
     _digit_separator_type: str = "_"
     _verilog_like_type: bool = False
     _upper_base_symbol: bool = False
@@ -309,10 +343,10 @@ class Bits:
     ) -> None:
         """设置默认显示格式的数字分隔符和宽度"""
         cls._digit_separator_type = digit_separator
-        cls._digit_separator_width_in_base_2 = width_in_base_2
-        cls._digit_separator_width_in_base_8 = width_in_base_8
-        cls._digit_separator_width_in_base_10 = width_in_base_10
-        cls._digit_separator_width_in_base_16 = width_in_base_16
+        cls._digit_separator[2] = width_in_base_2
+        cls._digit_separator[8] = width_in_base_8
+        cls._digit_separator[10] = width_in_base_10
+        cls._digit_separator[16] = width_in_base_16
 
     @classmethod
     def set_upper_base_symbol(cls, upper_base_symbol: bool) -> None:
@@ -428,6 +462,12 @@ class Bits:
         self._width = width
         self.fix_value()
 
+    def __bool__(self) -> bool:
+        return bool(self.value)
+
+    def __len__(self) -> int:
+        return self.width
+
     def _get_value(self, brange: tuple[int, int] | int) -> int:
         """获取维护的value的部分值"""
         if isinstance(brange, int):
@@ -504,18 +544,20 @@ class Bits:
         """对于fmt方法的简单封装，提供了默认进制的显示，可通过类属性修改修改"""
         return self.fmt(Bits._to_str_type, digit_sep=False)
 
-    def fmt(self, base: Literal[2, 8, 10, 16], digit_sep: bool = True) -> str:
+    def __index__(self) -> int:
+        return self.value
+
+    def fmt(
+        self,
+        base: Literal[2, 8, 10, 16],
+        digit_sep: bool = True,
+        verilog_like: bool | None = None,
+    ) -> str:
         """将Bits实例转换为对应进制的字符串，主要用于显示与信息传递"""
-        if base == 2:
-            digit_sep_width = Bits._digit_separator_width_in_base_2
-        elif base == 8:
-            digit_sep_width = Bits._digit_separator_width_in_base_8
-        elif base == 10:
-            digit_sep_width = Bits._digit_separator_width_in_base_10
-        elif base == 16:
-            digit_sep_width = Bits._digit_separator_width_in_base_16
-        else:
-            raise ValueError(f"{base = } not in [2,8,10,16]")
+        digit_sep_width = Bits._digit_separator.get(base, 4)
+        if verilog_like is None:
+            verilog_like = Bits._verilog_like_type
+
         return fmt_in_base(
             value=self.value,
             width=self.width,
@@ -523,9 +565,60 @@ class Bits:
             digit_separator=Bits._digit_separator_type if digit_sep else "",
             digits_per_group=digit_sep_width,
             upper_base=Bits._upper_base_symbol,
-            verilog_like=Bits._verilog_like_type,
+            verilog_like=verilog_like,
             upper_hex_digits=Bits._upper_hex_digits,
         )
+
+    def __format__(self, format_spec: str, /) -> str:
+        """提供自定义的格式化字符串\n
+        `{value:[group_options][group_width][verilog_like][type]}`\n
+        eg : `{Bits(0x12345678,32):4H}` -> '0x1234_5678'\n
+        eg : `{Bits(0x12345678,32):,2H}` -> '0x12,34,56,78'\n
+        """
+        # print(f"{format_spec = }")
+        cmd = re.match(
+            r"([^\dvVbBhHdDoO])?(\d+)?(([vV])?([bBhHdDoO]))?",
+            format_spec,
+        )
+        if cmd:
+            verilog_like = True if cmd.group(4) else False
+            g5 = cmd.group(5)
+            base = (
+                2
+                if g5 == "B" or g5 == "b"
+                else 8
+                if g5 == "O" or g5 == "o"
+                else 10
+                if g5 == "D" or g5 == "d"
+                else 16
+                if g5 == "H" or g5 == "h"
+                else 16
+            )
+            if cmd.group(1) and cmd.group(2):  # 有分隔符且有宽度
+                group_width = int(cmd.group(2))
+                sep = cmd.group(1)
+            elif cmd.group(1) and not cmd.group(2):  # 有分隔符但没有宽度
+                sep = cmd.group(1)
+                group_width = Bits._digit_separator.get(base, 4)
+            elif cmd.group(2) and not cmd.group(1):  # 没有分隔符但有宽度
+                sep = "_"
+                group_width = Bits._digit_separator.get(base, 4)
+            else:
+                sep = ""
+                group_width = 4
+
+            upper_hex = True if cmd.group(5) == "H" else False
+            return fmt_in_base(
+                self.value,
+                self.width,
+                base,
+                sep,
+                group_width,
+                verilog_like,
+                upper_hex_digits=upper_hex,
+            )
+        else:
+            return str(self)
 
     def fix_value(self) -> None:
         """当alue或width被修改之后进行的数据检查与截断处理"""
@@ -937,7 +1030,7 @@ class Bits:
             raise TypeError(f"Bits.__lshift__ Unsupported type: {type(other)}")
 
     def __irshift__(self, other: int) -> Self:
-        """支持 >> 运算符的右向移位"""
+        """支持 >>= 运算符的右向移位"""
         if isinstance(other, int):
             self.value = self.value >> other
             return self
@@ -945,7 +1038,7 @@ class Bits:
             raise TypeError(f"Bits.__rshift__ Unsupported type: {type(other)}")
 
     def __ilshift__(self, other: int) -> Self:
-        """支持 << 运算符的左向移位"""
+        """支持 <<= 运算符的左向移位"""
         if isinstance(other, int):
             self.value = self.value << other
             return self
@@ -965,13 +1058,20 @@ class Bits:
             raise TypeError(f"Unsupport type: {type(other)}")
 
     def __ror__(self, other: str | bool) -> Bits:
+        """支持 `|` 位或运算符的左操作数为str或bool，右操作数为Bits的情况\n
+        左操作数决定位宽\n
+        str必须待用位宽标识，可以被Bits初始化所接受\n
+        bool的位宽固定为1"""
         return Bits(other) | self
 
     def __ior__(self, other: Bits | int | str | bool) -> Self:
+        """支持 `|=` 位或运算符的原地操作"""
         self.value = (self | other).value
         return self
 
     def __and__(self, other: Bits | int | str | bool) -> Bits:
+        """支持 `&` 位与运算符的左操作数为Bits的情况\n
+        位宽由左操作数决定"""
         if isinstance(other, Bits):
             return Bits(self.value & other.value, self.width)
         elif isinstance(other, int):
@@ -982,13 +1082,19 @@ class Bits:
             raise TypeError(f"Unsupport type: {type(other)}")
 
     def __rand__(self, other: str | bool) -> Bits:
+        """支持 `&` 位与运算符的左操作数为str或bool，右操作数为Bits的情况\n
+        左操作数决定位宽\n
+        str必须拥有位宽标识；bool的位宽为1"""
         return Bits(other) & self
 
     def __iand__(self, other: Bits | int | str | bool) -> Self:
+        """支持 `&=` 位与运算符的原地操作"""
         self.value = (self & other).value
         return self
 
     def __xor__(self, other: Bits | int | str | bool) -> Bits:
+        """支持 `^` 异或运算符的左操作数为Bits的情况\n
+        位宽由左操作数决定"""
         if isinstance(other, Bits):
             return Bits(self.value ^ other.value, self.width)
         elif isinstance(other, int):
@@ -998,18 +1104,35 @@ class Bits:
         else:
             raise TypeError(f"Unsupport type: {type(other)}")
 
-    def __rxor__(self, other: str | bool):
+    def __rxor__(self, other: str | bool) -> Bits:
+        """支持 `^` 异或运算符的左操作数为str或bool，右操作数为Bits的情况\n
+        位宽依据左操作数\n
+        str必须待用位宽标识，可以被Bits初始化所接受\n
+        bool的位宽固定为1"""
         return Bits(other) ^ self
 
     def __ixor__(self, other: Bits | int | str | bool) -> Self:
+        """支持 `^` 异或运算符的原地修改"""
         self.value = (self ^ other).value
         return self
 
     def __invert__(self) -> Bits:
+        """支持 `~` 取反符号"""
         return Bits(invert_bits(self.value, self.width), self.width)
 
-    def invert(self) -> None:
+    def invert(self) -> Self:
+        """将Bits实例自身的值按位取反，返回自身\n
+        如果只是想获取一个新的取反实例用作赋值，使用取反符号`~`"""
         self.value = invert_bits(self.value, self.width)
+        return self
+
+    def __int__(self) -> int:
+        """支持 `int()` 转换，返回Bits实例的值"""
+        return self.value
+
+    def __float__(self) -> float:
+        """支持 `float()` 转换，返回Bits实例的值"""
+        return float(self.value)
 
 
 class BitView(Bits):
@@ -1056,8 +1179,6 @@ class Addr32(Bits):
     def __init__(
         self,
         address: BitsInitValue,
-        read_method: Callable | None = None,
-        write_method: Callable | None = None,
     ):
         super().__init__(address, 32)
 
@@ -1153,7 +1274,7 @@ class Register:
         ) != 0
 
     def __getattr__(self, name: str) -> Field:
-        if res := self.fields.get(name):
+        if (res := self.fields.get(name)) is not None:
             return res
         raise AttributeError(f"'Register' object has no attribute '{name}'")
 

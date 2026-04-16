@@ -14,6 +14,8 @@ from autestoy.tools.datatype import (
     num2bytes,
     rand_Bits,
     str2num,
+    sum_Bits,
+    sum_value_Bits,
     width_in_base,
 )
 
@@ -159,6 +161,9 @@ def test_Bits_init():
     t = Bits([(0x1234, 16), ("0x5678", 16)])
     assert t.value == 0x12345678
 
+    t = Bits(["16'h1234", "0x5678_u16", (0x90AB, 16), Bits(0xCDEF, 16)])
+    assert t.value == 0x1234567890ABCDEF
+    assert t.width == 64
     print("Bits.__init__() ok")
 
 
@@ -196,6 +201,25 @@ def test_Bits_str():
     t = Bits(0o123_456_765, 25)
     Bits.set_str_type(8)
     assert str(t) == "0o123456765"
+
+    t = Bits(0x8F, 8)
+    assert bin(t) == "0b10001111"
+    assert oct(t) == "0o217"
+    assert hex(t) == "0x8f"
+
+
+def test_Bits_format():
+    Bits.set_str_type(16)
+    t = Bits(0x1234_5678, 32)
+    assert str(t) == "0x12345678"
+    print(f"{t:,2}")
+    print(f"{t:4b}")
+    print(f"{t:3vh}")
+    print(f"{t:@4vh}")
+    print(f"{t:vh}")
+    print(f"{t:O}")
+    print(f"{t:d}")
+    print(f"{t:-1VD}")
 
 
 def test_Bits_fix():
@@ -432,6 +456,9 @@ def test_Bits_add():
     t = Bits(100, 32)
     assert "200_u8" + t == Bits(300 - 256, 8)
 
+    assert sum_value_Bits(Bits(100, 32), Bits(200, 32), Bits(0, 64)) == Bits(300, 64)
+    assert sum_Bits(Bits(100, 32), Bits(200, 32), Bits(0, 64)) == Bits(300, 32)
+
 
 def test_Bits_sub():
     t = Bits(200, 32)
@@ -470,8 +497,10 @@ def test_Bits_and():
     assert t & 0b0000_1111 == Bits(0b0000_0000, 8)
     assert t & 0b0101_0000 == 0b0101_0000
     assert t & "8'b1100_1111" == "0b1100_0000_u8"
+    assert t & True == "8'b0"
     assert "8'b1100_0000" & t == "0b1100_0000_u8"
     assert "4'b1111" & t == Bits(0, 4)
+    assert True & t == "1'b0"
     assert Bits(0b1111_1111, 8) & t == Bits(0b1111_0000, 8)
     t &= 0x80
     assert t == Bits(0x80, 8)
@@ -482,8 +511,10 @@ def test_Bits_or():
     assert t | Bits(0b0011_0000, 8) == Bits(0b1111_0011, 8)
     assert t | 0xF8 == Bits(0b1111_1011, 8)
     assert t | "32'hFF" == Bits(0b1111_1111, 8)
+    assert t | True == Bits("8'b1100_0011")
     assert Bits("32'hff") | t == Bits(0b1111_1111, 32)
     assert "16'b1100" | t == Bits(0b1100_1111, 16)
+    assert True | t == "1'b1"
     t |= 0x08
     assert t == Bits(0b1100_1011, 8)
 
@@ -493,8 +524,10 @@ def test_Bits_xor():
     assert t ^ Bits(0b0101, 4) == Bits(0b1100, 4)
     assert t ^ 0b0101 == Bits(0b1100, 4)
     assert t ^ "4'b0101" == Bits(0b1100, 4)
+    assert t ^ True == Bits("4'b1000")
     assert Bits(0b1100, 4) ^ t == Bits(0b0101, 4)
     assert "5'b11111" ^ t == Bits(0b10110, 5)
+    assert True ^ t == "1'b0"
     t ^= 0b1111
     assert t == Bits(0b0110, 4)
 
@@ -546,6 +579,7 @@ def test_Register():
     reg.add_field("DATA_L", (16, 31), "0x0000_i16")
     assert reg.address == address
     assert reg.bits == Bits(0x0, 32)
+    print(f"{reg.fields = }")
     assert reg.DATA_H == Bits(0x0, 16)
     assert reg.DATA_L == Bits(0x0, 16)
 

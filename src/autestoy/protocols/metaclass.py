@@ -82,8 +82,7 @@ class DUTConfiguratorBase:
             # return False
 
     def add_dynamic_method(self, name: str, func: Callable):
-        """注册动态方法，通过`self.name`调用\n
-        方法会自动注册到DynamicMethods类中，提供简单的参数类型补全"""
+        """注册动态方法，通过`self.name`调用"""
         # func_types = get_function_types_as_str(func)
         # pprint(func_types)
         self.dynamic_methods[name] = MethodType(func, self)

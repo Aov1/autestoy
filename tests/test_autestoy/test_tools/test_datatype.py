@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from numpy._typing import _16Bit
 
 from autestoy.tools.datatype import (
     Addr32,
@@ -16,7 +15,6 @@ from autestoy.tools.datatype import (
     str2num,
     sum_Bits,
     sum_value_Bits,
-    width_in_base,
 )
 
 

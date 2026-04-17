@@ -9,6 +9,7 @@ class CollectType(StrEnum):
     SFTP = auto()
     Channel = auto()
     Local = auto()
+    Serial = auto()
     TrySeconds = auto()
 
 

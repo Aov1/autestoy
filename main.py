@@ -94,3 +94,31 @@
 #     SSH_KEY = None  # 例如 "/home/user/.ssh/id_rsa"
 
 #     bridge(SERIAL_PORT, SSH_HOST, SSH_USER, SSH_PASS, SSH_KEY)
+
+import time
+
+# import serial
+# com = serial.Serial("/dev/ttyUSB0", 115200, timeout=0.05)
+# res = com.read(1024)
+# print("[CLEAN]", res, end="")
+# com.write(b"pwd\n")
+# time.sleep(1)
+# res = com.read(1024)
+# print("[GET1 ]", res, end="")
+# res = com.read()
+# print("[GET2 ]", res, end="")
+from autestoy.protocols.serial import Serial, SerialConfig
+
+conf = SerialConfig(
+    port="/dev/ttyUSB0",
+    baudrate=115200,
+)
+com = Serial("TestCom", conf)
+com.shell_mode(True)
+com.shell_run("ls")
+com.shell_run("pwd")
+com.shell_run("ps -au")
+com.shell_run("echo $$")
+com.shell_run("echo $?")
+com.shell_run("pwd")
+com.shell_run("echo '     [DONW]'")

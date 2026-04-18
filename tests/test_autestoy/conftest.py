@@ -1,3 +1,4 @@
+from autestoy.protocols.serial import SerialConfig,Serial
 import pytest
 
 from autestoy import SSH, AnsiBackground, AnsiColor, AnsiReset, AnsiStyle, RemoteConfig
@@ -15,6 +16,9 @@ def remote():
         port=8022,
     ).set_name("HUAWEI")
 
+@pytest.fixture(scope="session")
+def uart_conf():
+    return SerialConfig('/dev/ttyUSB0',115200)
 
 @pytest.fixture(scope="session")
 def ssh(remote: RemoteConfig):
@@ -27,6 +31,13 @@ def ssh(remote: RemoteConfig):
     print("ssh closed")
 
 
+@pytest.fixture(scope="session")
+def uart(uart_conf:SerialConfig):
+    uart = Serial('UartT',uart_conf,shell_mode=True) 
+    yield uart
+    uart.com.close()
+    assert uart.com.closed
+    print('Uart Colsed')
 # @pytest.fixture(scope="session")
 def log(title: str):
     style = AnsiColor.black + AnsiBackground.yellow + AnsiStyle.bold

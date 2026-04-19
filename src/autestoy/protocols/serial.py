@@ -196,3 +196,11 @@ class Serial:
             elif isinstance(cmd, Iterable):
                 results.extend(self.shell_run_lines(*cmd))
         return results
+
+    def send(self, data: bytes) -> None:
+        """对于pyserial Serial().write()的简单包装"""
+        self.com.write(data)
+
+    def recv(self, size: int = 1) -> bytes:
+        """对于pyserial Serial().read()的简单包装"""
+        return self.com.read(size)

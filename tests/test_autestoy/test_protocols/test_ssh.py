@@ -219,8 +219,8 @@ def test_Channel_get_pid(ssh: SSH):
     assert pid == ch.pid
 
 
-# def test_h618(ssh: SSH):
-#     log("test_h618")
-#     ch = ssh.create_channel()
-#     for i in range(10):
-#         res = ch.run("pwd")
+def test_h618(ssh: SSH):
+    log("test_h618")
+    ch = ssh.create_channel()
+    for i in range(10):
+        res = ch.run("pwd")

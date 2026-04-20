@@ -8,6 +8,7 @@ dependencies = [
     "paramiko>=4.0.0",
     "pyserial>=3.5",
     "reportlib>=3.4.0",
+    "telnetlib3>=4.0.2",
 ]
 
 # [project.url]

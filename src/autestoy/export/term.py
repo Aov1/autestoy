@@ -17,6 +17,9 @@ def get_terminal_size() -> tuple[int, int]:
     return shutil.get_terminal_size()
 
 
+PROMPT_pattern = r"(?:[\w@\-\.\[\]]+[:~/\w\-\. ]*|[:~/\w\-\. ]+)?[\$#]\s*$"
+
+
 class TermStyle:
     timestamp_font_color = AnsiColor.blue
     timestamp_background_color = AnsiColor.none

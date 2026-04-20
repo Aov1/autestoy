@@ -3,7 +3,8 @@ from autestoy.tools.ansi import remove_ansi
 
 
 def test_telnet_init(telnet: Telnet):
-    telnet.tel3.write("pwd\n")
-    res = telnet.tel3.read_some()
-    print(remove_ansi(res))
+    telnet.shell_run("ifconfig")
+    telnet.shell_run("ls")
+    telnet.shell_run("pwd")
+
     assert telnet.prompt is not None

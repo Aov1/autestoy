@@ -10,9 +10,12 @@ from autestoy.protocols.telnet import Telnet, TelnetConfig
 @pytest.fixture(scope="session")
 def remote():
     return RemoteConfig(
+        # user="kickpi",
         user="u0_a210",
-        ip="192.168.18.6",
-        # ip="192.168.4.32",
+        # ip="192.168.4.191",
+        # ip="192.168.18.6",
+        ip="192.168.4.32",
+        # password="kickpi",
         password="0402",
         port=8022,
     ).set_name("HUAWEI")

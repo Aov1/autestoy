@@ -8,7 +8,16 @@ import threading as td
 import time
 import warnings
 from os import PathLike
-from typing import IO, Callable, Iterable, Iterator, Self, TypeAlias, overload
+from typing import (
+    IO,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Self,
+    TypeAlias,
+    overload,
+)
 
 import paramiko as pk
 from paramiko.sftp_attr import SFTPAttributes
@@ -17,7 +26,7 @@ from paramiko.sftp_file import SFTPFile
 # 相对调用
 from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
-from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
+from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi, remove_ansi_bytes
 from ..tools.record import CmdRecord, CmdRecording, MetaRecord
 from ..tools.result import Result
 
@@ -553,7 +562,7 @@ class Channel:
         self.name = name
         self.meta_record.name = name
 
-    def run(self, cmd: str) -> CmdRecord[str]:
+    def run_old(self, cmd: str) -> CmdRecord[str]:
         """执行命令，使用正则匹配终端提示符判断是否结束"""
         if self.shell.recv_ready():
             self.shell.recv(65535)
@@ -612,6 +621,74 @@ class Channel:
         record.exit_code = self._get_exit_code()
         self.last_record = record
         return record
+
+    def run(self, cmd: str) -> CmdRecord[str]:
+        """执行命令，返回命令记录，保证cmd为单个命令，不作命令拆分处理"""
+        if self.shell.recv_ready():
+            self.shell.recv(65535)
+
+        # cmd_lines = cmd.replace("\r\n", "\n").replace("\r", "").strip().split("\n")
+        # cmd_lines = [
+        #     e.strip()
+        #     for e in cmd_lines
+        #     if e.strip() != "" and not e.strip().startswith("#")
+        # ]
+
+        record = CmdRecord[str](cmd, f"[{self.name}]{self.prompt_now}")
+        self.cmds.append(record)
+        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+
+        for each_line in self._run_line_generator(cmd):
+            timestamp, _ = Term.putsln(each_line)
+            record.result_append(each_line, timestamp)
+
+        record.record_end()
+        record.exit_code = self._get_exit_code()
+        self.last_record = record
+        return record
+
+    def _run_line_generator(self, cmd: str) -> Generator[str, None, None]:
+        """生成器方式逐行返回终端交互模式的输出，要求配置完备终端提示符捕获，否则无法退出"""
+        buf = b""  # 处理缓冲区
+
+        f_cmd_skip = False  # 是否处理完发送的命令
+
+        self.shell.send(
+            bytes(cmd + "\n", "utf-8")
+        )  # 发送的字符同样会进入接收当中，需要去重
+
+        while True:
+            if self.shell.recv_ready():  # 缓冲非空
+                rcv = self.shell.recv(65535)  # 接收
+
+                buf += rcv  # 存入buf
+                while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
+                    buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
+                    line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
+                    line = line_b.decode().rstrip().replace("\r", "")
+
+                    if not f_cmd_skip and cmd in remove_ansi(line):
+                        f_cmd_skip = True  # 标志置位
+                        continue
+
+                    if self.prompt_complie.search(
+                        remove_ansi(line)
+                    ):  # 当前行与命令行提示符匹配
+                        self.prompt_now = remove_ansi(line).strip(
+                            "\r\n "
+                        )  # 更新命令行提示符
+                        return
+                    yield line
+                else:
+                    if (
+                        self.prompt_complie.search(remove_ansi(buf.decode()))
+                        and f_cmd_skip
+                    ):
+                        prompt_new = buf.decode().replace("\r", "").strip()
+                        self.prompt_now = prompt_new
+                        return
+
+            time.sleep(0.001)
 
     @overload
     def run_lines(self, *cmds: str) -> list[CmdRecord[str]]:

@@ -54,6 +54,7 @@ class Telnet:
             raise RuntimeError(
                 f"[Telnet] {telnet_conf.host}:{telnet_conf.port} Not connected"
             )
+        # 是否登陆
         if self.conf.user is not None or self.conf.password is not None:
             self.prompt = self._login(telnet_conf.user, telnet_conf.password)
         self.cmds: list[CmdRecord] = []

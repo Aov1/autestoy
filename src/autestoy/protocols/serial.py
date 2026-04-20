@@ -131,18 +131,18 @@ class Serial:
         )
         self.cmds.append(record)
         Term.putsln(record.get_fmt_prompt())
-        for line in self._run(cmd):
+        for line in self._run_line_generator(cmd):
             timestamp, _ = Term.putsln(line)
             record.result_append(line, timestamp)
 
         if self.conf_shell_get_exit_code:
-            exit_code = next(self._run("echo $?"))
+            exit_code = next(self._run_line_generator("echo $?"))
             if exit_code.isdigit():
                 record.exit_code = int(exit_code)
         record.record_end()
         return record
 
-    def _run(self, cmd: str) -> Generator[str, None, None]:
+    def _run_line_generator(self, cmd: str) -> Generator[str, None, None]:
         """生成器方式逐行返回终端交互模式的输出，要求配置完备终端提示符捕获，否则无法退出"""
         # 清空缓冲
         while self.com.read(Serial.read_size) != b"":

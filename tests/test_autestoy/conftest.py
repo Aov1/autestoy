@@ -2,7 +2,7 @@ import pytest
 
 from autestoy import SSH, AnsiBackground, AnsiColor, AnsiReset, AnsiStyle, RemoteConfig
 from autestoy.protocols.serial import Serial, SerialConfig, SerialShell
-from autestoy.protocols.telnet import Telnet, TelnetConfig
+from autestoy.protocols.telnet import Telnet, TelnetConfig, TelnetShell
 
 # from autestoy.protocols.ssh import SSH, RemoteConfig
 
@@ -29,11 +29,8 @@ def uart_conf():
 @pytest.fixture(scope="session")
 def telnet_conf():
     return TelnetConfig(
-        name="kickpi",
         host="192.168.4.191",
         port=2323,
-        user="kickpi",
-        password="kickpi",
     )
 
 
@@ -59,7 +56,7 @@ def uart(uart_conf: SerialConfig):
 
 @pytest.fixture(scope="session")
 def telnet(telnet_conf: TelnetConfig):
-    tel = Telnet(telnet_conf)
+    tel = TelnetShell(telnet_conf)
     yield tel
     tel.tel3.close()
     assert tel.tel3._closed

@@ -2,40 +2,38 @@
 
 import re
 import time
-from typing import Generator
+from typing import Generator, Self
 
 from telnetlib3.sync import TelnetConnection
 
 from autestoy.tools.ansi import remove_ansi
 
-from ..export.term import PROMPT_pattern, Term
+from ..export.term import PROMPT_pattern as prompt_pattern_default
+from ..export.term import Term
 from ..tools.record import CmdRecord
 
 
 class TelnetConfig:
     def __init__(
         self,
-        name: str,
         host: str,
         port: int = 23,
-        user: str | None = None,
-        password: str | None = None,
         timeout: float | None = None,
         encoding: str = "utf-8",
-        prompt_pattern: str = PROMPT_pattern,
     ) -> None:
         """Telnet配置，用于创建Telnet连接\n
         在user与password都为None时不进行登陆操作"""
-        self.name = name
         # for telnetlib3 TelnetConnection
         self.host: str = host
         self.port: int = port
         self.timeout: float | None = timeout
         self.encoding: str = encoding
-        # for login
-        self.user: str | None = user
-        self.password: str | None = password
-        self.prompt_pattern: str = PROMPT_pattern
+        # name
+        self.name = f"{host}:{port}"
+
+    def set_name(self, name: str) -> Self:
+        self.name = name
+        return self
 
 
 class Telnet:
@@ -48,19 +46,50 @@ class Telnet:
             timeout=telnet_conf.timeout,
             encoding=telnet_conf.encoding,
         )
-        self.prompt_pattern = re.compile(telnet_conf.prompt_pattern)
         self.tel3.connect()
         if not self.is_connected():
             raise RuntimeError(
                 f"[Telnet] {telnet_conf.host}:{telnet_conf.port} Not connected"
             )
-        # 是否登陆
-        if self.conf.user is not None or self.conf.password is not None:
-            self.prompt = self._login(telnet_conf.user, telnet_conf.password)
-        self.cmds: list[CmdRecord] = []
 
     def is_connected(self) -> bool:
         return self.tel3._connected and self.tel3 is not None
+
+    def send(self, data: str) -> None:
+        self.tel3.write(data)
+
+    def recv_no_block(self) -> str:
+        """接收telnet输出，非阻塞，无内容返回空字符"""
+        try:
+            res = self.tel3.read_some(0.01)
+        except TimeoutError:
+            return ""
+        return res.decode() if isinstance(res, bytes) else res
+
+    def recv_block(self) -> str:
+        """接收telnet输出，直到有非空字符串"""
+        while (res := self.recv_no_block()) == "":
+            pass
+        return res
+
+
+class TelnetShell(Telnet):
+    def __init__(
+        self,
+        telnet_conf: TelnetConfig,
+        user_and_password: tuple[str | None, str | None] = (None, None),
+        prompt_pattern: str = prompt_pattern_default,
+    ) -> None:
+        super().__init__(telnet_conf)
+        self.user: str | None = user_and_password[0]
+        self.password: str | None = user_and_password[1]
+
+        self.prompt_pattern = re.compile(prompt_pattern)
+
+        # 是否登陆
+        if self.user is not None or self.password is not None:
+            self.prompt = self._login(self.user, self.password)
+        self.cmds: list[CmdRecord] = []
 
     def _login(
         self, user: str | None = None, password: str | None = None
@@ -72,7 +101,7 @@ class Telnet:
         buf = ""
         st = time.time()
         while time.time() - st < 5:
-            res = self.recv_no_wait()
+            res = self.recv_no_block()
             buf += res
             if "incorrect" in buf:
                 raise RuntimeError("Login incorrect")
@@ -80,30 +109,13 @@ class Telnet:
                 return prompt.group()
         raise RuntimeError("Login timeout")
 
-    def send(self, data: str) -> None:
-        self.tel3.write(data)
-
-    def recv_no_wait(self) -> str:
-        """接收telnet输出，非阻塞，无内容返回空字符"""
-        try:
-            res = self.tel3.read_some(0.01)
-        except TimeoutError:
-            return ""
-        return res.decode() if isinstance(res, bytes) else res
-
-    def recv(self) -> str:
-        """接收telnet输出，直到有非空字符串"""
-        while (res := self.recv_no_wait()) == "":
-            pass
-        return res
-
     def shell_run_line_generator(self, cmd: str) -> Generator[str, None, None]:
         """逐行生成telnet输出"""
         self.send(cmd + "\n")
         buf = ""
         skip_cmd = False
         while True:
-            buf += self.recv_no_wait()
+            buf += self.recv_no_block()
             while "\n" in buf or "\r\n" in buf:
                 buf = buf.replace("\r\n", "\n").replace("\r", "")
                 line, buf = buf.split("\n", 1)

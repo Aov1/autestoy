@@ -95,10 +95,7 @@ class CmdRecord(Generic[T]):
     def get_result(self) -> list[str]:
         """获取命令的输出结果，去除Result，去除ansi转义\n
         对于非str类型的结果尝试转换为str"""
-        return [
-            remove_ansi(e[1].get()) if e[1].type is str else str(e[1].get())
-            for e in self.result
-        ]
+        return [remove_ansi(str(e[1].get())) for e in self.result]
 
     def get_result_string(self) -> str:
         """获取命令的输出结果字符串，将多行输出合并，去除ansi转义"""
@@ -106,10 +103,7 @@ class CmdRecord(Generic[T]):
 
     def get_result_iter(self) -> Iterator[str]:
         """获取命令的输出结果迭代器，去除ansi转义"""
-        return (
-            remove_ansi(e[1].get()) if e[1].type is str else str(e[1].get())
-            for e in self.result
-        )
+        return (remove_ansi(str(e[1].get())) for e in self.result)
 
     def search(self, re_string: str) -> re.Match[str] | None:
         """搜索命令的输出结果，匹配立即返回re.Match对象，未匹配返回None"""

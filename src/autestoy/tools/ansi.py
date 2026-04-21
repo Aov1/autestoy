@@ -16,11 +16,11 @@ def remove_ansi(text: bytes) -> bytes: ...
 def remove_ansi(text: str) -> str: ...
 
 
-T = TypeVar("T")
+# T = TypeVar("T")
 
 
-@overload
-def remove_ansi(text: T) -> str: ...
+# @overload
+# def remove_ansi(text: T) -> str: ...
 
 
 # def remove_ansi_bytes(text: bytes):
@@ -28,7 +28,7 @@ def remove_ansi(text: T) -> str: ...
 #     return ANSI_ESCAPE_B.sub(b"", text)
 
 
-def remove_ansi(text: str | bytes | T) -> str | bytes | T:
+def remove_ansi(text: str | bytes) -> str | bytes:
     if isinstance(text, bytes):
         global ANSI_ESCAPE_B
         return ANSI_ESCAPE_B.sub(b"", text)

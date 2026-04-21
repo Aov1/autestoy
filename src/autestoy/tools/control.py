@@ -1,10 +1,12 @@
 import time
+from typing import overload
 
 from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term, TermStyle
 from .ansi import AnsiColor, AnsiReset
 from .record import CmdRecord
-from .result import Result
+
+# from .result import Result
 from .timestamp import Timestamp
 
 
@@ -62,3 +64,25 @@ def ulog(
         )
     record.record_end()
     return record
+
+
+@overload
+def get_line_from_head(buf: bytes) -> tuple[bytes, bytes]: ...
+
+
+@overload
+def get_line_from_head(buf: str) -> tuple[str, str]: ...
+
+
+def get_line_from_head(buf: str | bytes) -> tuple[bytes | str, bytes | str]:
+    """从缓冲区头部获取一行,没有完整行则返回剩余空字符和原buf"""
+    if isinstance(buf, str):
+        if "\r\n" in buf or "\n" in buf:
+            line, buf = buf.split("\n", 1)
+            return line, buf
+        return "", buf
+    else:
+        while b"\r\n" in buf or b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            return line, buf
+        return "", buf

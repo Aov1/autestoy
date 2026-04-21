@@ -26,7 +26,7 @@ from paramiko.sftp_file import SFTPFile
 # 相对调用
 from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
-from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi, remove_ansi_bytes
+from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.record import CmdRecord, CmdRecording, MetaRecord
 from ..tools.result import Result
 

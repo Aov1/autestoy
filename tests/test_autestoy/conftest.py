@@ -1,7 +1,7 @@
 import pytest
 
 from autestoy import SSH, AnsiBackground, AnsiColor, AnsiReset, AnsiStyle, RemoteConfig
-from autestoy.protocols.serial import Serial, SerialConfig
+from autestoy.protocols.serial import Serial, SerialConfig, SerialShell
 from autestoy.protocols.telnet import Telnet, TelnetConfig
 
 # from autestoy.protocols.ssh import SSH, RemoteConfig
@@ -50,10 +50,10 @@ def ssh(remote: RemoteConfig):
 
 @pytest.fixture(scope="session")
 def uart(uart_conf: SerialConfig):
-    uart = Serial("UartT", uart_conf, shell_mode=True)
+    uart = SerialShell(uart_conf)
     yield uart
     uart.com.close()
-    assert uart.com.closed
+    assert not uart.com.is_open
     print("Uart Colsed")
 
 

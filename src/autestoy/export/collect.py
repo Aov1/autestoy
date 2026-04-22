@@ -10,6 +10,7 @@ class CollectType(StrEnum):
     Channel = auto()
     Local = auto()
     Serial = auto()
+    Telnet = auto()
     TrySeconds = auto()
 
 

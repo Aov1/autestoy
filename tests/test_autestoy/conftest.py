@@ -1,3 +1,5 @@
+from typing import Generator
+
 import pytest
 
 from autestoy import SSH, AnsiBackground, AnsiColor, AnsiReset, AnsiStyle, RemoteConfig
@@ -8,7 +10,7 @@ from autestoy.protocols.telnet import Telnet, TelnetConfig, TelnetShell
 
 
 @pytest.fixture(scope="session")
-def remote():
+def remote() -> RemoteConfig:
     return RemoteConfig(
         user="kickpi",
         # user="u0_a210",
@@ -22,12 +24,12 @@ def remote():
 
 
 @pytest.fixture(scope="session")
-def uart_conf():
+def uart_conf() -> SerialConfig:
     return SerialConfig("/dev/ttyUSB0", 115200)
 
 
 @pytest.fixture(scope="session")
-def telnet_conf():
+def telnet_conf() -> TelnetConfig:
     return TelnetConfig(
         host="192.168.4.191",
         port=2323,
@@ -35,7 +37,7 @@ def telnet_conf():
 
 
 @pytest.fixture(scope="session")
-def ssh(remote: RemoteConfig):
+def ssh(remote: RemoteConfig) -> Generator[SSH, None, None]:
     ssh_t = SSH(remote, timeout=60)
     assert ssh_t.is_connected(), "ssh connect failed"
     yield ssh_t

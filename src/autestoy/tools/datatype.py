@@ -461,6 +461,10 @@ class Bits:
         self._width = width
         self.fix_value()
 
+    def max(self) -> Bits:
+        """返回一个全1的Bits实例，用于表示最大值"""
+        return Bits((1 << self.width) - 1, self.width)
+
     def __bool__(self) -> bool:
         return bool(self.value)
 
@@ -1351,102 +1355,102 @@ class Addr64(Bits):
         return [Addr32(high), Addr32(low)]
 
 
-class Field(BitView):
-    def __init__(
-        self,
-        master: Bits,
-        name: str,
-        brange: tuple[int, int] | int,
-        default_value: BitsInitValue | None = None,
-        info: str = "",
-    ) -> None:
-        self.master: Bits = master
-        self.name: str = name
-        self.field_brange: tuple[int, int] = (
-            brange if isinstance(brange, tuple) else (brange, brange)
-        )
-        self.field_width: int = self.field_brange[1] - self.field_brange[0] + 1
-        self.default_value: Bits | None = (
-            Bits(default_value, self.field_width) if default_value is not None else None
-        )
-        self.enums: dict[str, dict[str, Any]] = {}
-        self.info: str = info
-        super().__init__(self.master, self.field_brange)
+# class Field(BitView):
+#     def __init__(
+#         self,
+#         master: Bits,
+#         name: str,
+#         brange: tuple[int, int] | int,
+#         default_value: BitsInitValue | None = None,
+#         info: str = "",
+#     ) -> None:
+#         self.master: Bits = master
+#         self.name: str = name
+#         self.field_brange: tuple[int, int] = (
+#             brange if isinstance(brange, tuple) else (brange, brange)
+#         )
+#         self.field_width: int = self.field_brange[1] - self.field_brange[0] + 1
+#         self.default_value: Bits | None = (
+#             Bits(default_value, self.field_width) if default_value is not None else None
+#         )
+#         self.enums: dict[str, dict[str, Any]] = {}
+#         self.info: str = info
+#         super().__init__(self.master, self.field_brange)
 
-    def add_enum(self, name: str, value: int | Bits | bool | str, info: str = ""):
-        self.enums[name] = {
-            "value": Bits(value, self.field_width),
-            "info": info,
-        }
+#     def add_enum(self, name: str, value: int | Bits | bool | str, info: str = ""):
+#         self.enums[name] = {
+#             "value": Bits(value, self.field_width),
+#             "info": info,
+#         }
 
-    def select_enum(self, name: str) -> None:
-        if name not in self.enums:
-            raise ValueError(f"Enum {name} not found")
-        self.value = self.enums[name]["value"].value
+#     def select_enum(self, name: str) -> None:
+#         if name not in self.enums:
+#             raise ValueError(f"Enum {name} not found")
+#         self.value = self.enums[name]["value"].value
 
 
-class Register:
-    def __init__(
-        self,
-        address: Addr32 | Addr64,
-        name: str | None = None,
-        value_width: int = 32,
-        read_method: Callable | None = None,
-        write_method: Callable | None = None,
-    ) -> None:
-        self.address: Addr32 | Addr64 = address
-        self.name: str | None = name
-        self.bits_width: int = value_width
-        self.bits: Bits = Bits(0, value_width)
-        self.fields: dict[str, Field] = {}
-        self.bitmap = Bits(0, value_width)
-        self.read_method: Callable | None = (
-            None if read_method is None else self.config_read_method(read_method)
-        )
-        self.write_method: Callable | None = (
-            None if write_method is None else self.config_write_method(write_method)
-        )
+# class Register:
+#     def __init__(
+#         self,
+#         address: Addr32 | Addr64,
+#         name: str | None = None,
+#         value_width: int = 32,
+#         read_method: Callable | None = None,
+#         write_method: Callable | None = None,
+#     ) -> None:
+#         self.address: Addr32 | Addr64 = address
+#         self.name: str | None = name
+#         self.bits_width: int = value_width
+#         self.bits: Bits = Bits(0, value_width)
+#         self.fields: dict[str, Field] = {}
+#         self.bitmap = Bits(0, value_width)
+#         self.read_method: Callable | None = (
+#             None if read_method is None else self.config_read_method(read_method)
+#         )
+#         self.write_method: Callable | None = (
+#             None if write_method is None else self.config_write_method(write_method)
+#         )
 
-    def add_field(
-        self,
-        name: str,
-        brange: tuple[int, int] | int,
-        default_value: BitsInitValue | None = None,
-    ) -> None:
-        if self._is_field_overlap(brange):
-            raise ValueError(f"Field {name} overlaps with existing field")
-        field = Field(self.bits, name, brange, default_value)
-        self.fields[field.name] = field
-        st, ed = brange if isinstance(brange, tuple) else (brange, brange)
-        self.bitmap[st:ed] = max_value(field.width)
+#     def add_field(
+#         self,
+#         name: str,
+#         brange: tuple[int, int] | int,
+#         default_value: BitsInitValue | None = None,
+#     ) -> None:
+#         if self._is_field_overlap(brange):
+#             raise ValueError(f"Field {name} overlaps with existing field")
+#         field = Field(self.bits, name, brange, default_value)
+#         self.fields[field.name] = field
+#         st, ed = brange if isinstance(brange, tuple) else (brange, brange)
+#         self.bitmap[st:ed] = max_value(field.width)
 
-    def _is_field_overlap(self, brange: tuple[int, int] | int) -> bool:
-        return (
-            self.bitmap[brange[0] : brange[1]]
-            if isinstance(brange, tuple)
-            else self.bitmap[brange]
-        ) != 0
+#     def _is_field_overlap(self, brange: tuple[int, int] | int) -> bool:
+#         return (
+#             self.bitmap[brange[0] : brange[1]]
+#             if isinstance(brange, tuple)
+#             else self.bitmap[brange]
+#         ) != 0
 
-    def __getattr__(self, name: str) -> Field:
-        if (res := self.fields.get(name)) is not None:
-            return res
-        raise AttributeError(f"'Register' object has no attribute '{name}'")
+#     def __getattr__(self, name: str) -> Field:
+#         if (res := self.fields.get(name)) is not None:
+#             return res
+#         raise AttributeError(f"'Register' object has no attribute '{name}'")
 
-    def config_read_method(self, func: Callable) -> None:
-        self.read_method = MethodType(func, self)
+#     def config_read_method(self, func: Callable) -> None:
+#         self.read_method = MethodType(func, self)
 
-    def config_write_method(self, func: Callable) -> None:
-        self.write_method = MethodType(func, self)
+#     def config_write_method(self, func: Callable) -> None:
+#         self.write_method = MethodType(func, self)
 
-    def read(self, *args, **kwargs) -> Any:
-        if self.read_method is None:
-            raise NotImplementedError("read_method is not configured")
-        return self.read_method(*args, **kwargs)
+#     def read(self, *args, **kwargs) -> Any:
+#         if self.read_method is None:
+#             raise NotImplementedError("read_method is not configured")
+#         return self.read_method(*args, **kwargs)
 
-    def write(self, value: int, *args, **kwargs) -> None:
-        if self.write_method is None:
-            raise NotImplementedError("write_method is not configured")
-        self.write_method(value, *args, **kwargs)
+#     def write(self, value: int, *args, **kwargs) -> None:
+#         if self.write_method is None:
+#             raise NotImplementedError("write_method is not configured")
+#         self.write_method(value, *args, **kwargs)
 
 
 class Packet:

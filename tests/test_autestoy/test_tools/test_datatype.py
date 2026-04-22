@@ -6,8 +6,8 @@ from autestoy.tools.datatype import (
     Addr64,
     Bits,
     BitView,
-    Field,
-    Register,
+    # Field,
+    # Register,
     fmt_in_base,
     insert_every_n,
     rand_Bits,
@@ -604,54 +604,54 @@ def test_Addr64():
     assert addr.split() == [Bits(0x12345678, 32), Bits(0x90ABCDEF, 32)]
 
 
-def test_Field():
-    t = Bits(0x12345678, 32)
-    data_h = Field(t, "DATA_H", (0, 15), 0xFFFF)
-    data_l = Field(t, "DATA_L", (16, 31), "0x0000_u16")
-    assert data_h.default_value == Bits(0xFFFF, 16)
-    assert data_l.default_value == Bits(0x0000, 16)
+# def test_Field():
+#     t = Bits(0x12345678, 32)
+#     data_h = Field(t, "DATA_H", (0, 15), 0xFFFF)
+#     data_l = Field(t, "DATA_L", (16, 31), "0x0000_u16")
+#     assert data_h.default_value == Bits(0xFFFF, 16)
+#     assert data_l.default_value == Bits(0x0000, 16)
 
 
-def test_Register():
-    address = Addr32(0x12345678)
-    reg = Register(address)
-    reg.add_field("DATA_H", (0, 15), 0xFFFF)
-    reg.add_field("DATA_L", (16, 31), "0x0000_i16")
-    assert reg.address == address
-    assert reg.bits == Bits(0x0, 32)
-    print(f"{reg.fields = }")
-    assert reg.DATA_H == Bits(0x0, 16)
-    assert reg.DATA_L == Bits(0x0, 16)
+# def test_Register():
+#     address = Addr32(0x12345678)
+#     reg = Register(address)
+#     reg.add_field("DATA_H", (0, 15), 0xFFFF)
+#     reg.add_field("DATA_L", (16, 31), "0x0000_i16")
+#     assert reg.address == address
+#     assert reg.bits == Bits(0x0, 32)
+#     print(f"{reg.fields = }")
+#     assert reg.DATA_H == Bits(0x0, 16)
+#     assert reg.DATA_L == Bits(0x0, 16)
 
-    reg.bits[:] = Bits(0x12345678, 32)
-    assert reg.bits.value == 0x12345678
-    reg.DATA_H[:] = 0x1234
-    reg.DATA_L[:] = "0x5678_u16"
-    assert reg.DATA_H == Bits(0x1234, 16)
-    assert reg.DATA_L == Bits(0x5678, 16)
+#     reg.bits[:] = Bits(0x12345678, 32)
+#     assert reg.bits.value == 0x12345678
+#     reg.DATA_H[:] = 0x1234
+#     reg.DATA_L[:] = "0x5678_u16"
+#     assert reg.DATA_H == Bits(0x1234, 16)
+#     assert reg.DATA_L == Bits(0x5678, 16)
 
-    reg.config_read_method(register_read)
-    reg.config_write_method(register_write)
-    reg.read()
-    print(f"{reg.bits = }")
-    reg.write(0x5678_ABCD)
-    print(f"{reg.bits = }")
-    for e in reg.fields:
-        print(f"{e = }")
-    assert reg.DATA_H == Bits(0x5678, 16)
-    assert reg.DATA_L == Bits(0xABCD, 16)
-    assert reg.bits == Bits(0x5678_ABCD, 32)
+#     reg.config_read_method(register_read)
+#     reg.config_write_method(register_write)
+#     reg.read()
+#     print(f"{reg.bits = }")
+#     reg.write(0x5678_ABCD)
+#     print(f"{reg.bits = }")
+#     for e in reg.fields:
+#         print(f"{e = }")
+#     assert reg.DATA_H == Bits(0x5678, 16)
+#     assert reg.DATA_L == Bits(0xABCD, 16)
+#     assert reg.bits == Bits(0x5678_ABCD, 32)
 
-    reg.DATA_H.add_enum("MAX", 0xFFFF, "Maximum value")
-    reg.DATA_H.select_enum("MAX")
-    assert reg.DATA_H == Bits(0xFFFF, 16)
-    assert reg.bits == Bits(0xFFFF_ABCD, 32)
-
-
-def register_read(self: Register):
-    self.bits[:] = rand_Bits(0x0, 0xFFFFFFFF, 32)
-    return self.bits
+#     reg.DATA_H.add_enum("MAX", 0xFFFF, "Maximum value")
+#     reg.DATA_H.select_enum("MAX")
+#     assert reg.DATA_H == Bits(0xFFFF, 16)
+#     assert reg.bits == Bits(0xFFFF_ABCD, 32)
 
 
-def register_write(self: Register, value):
-    self.bits[:] = value
+# def register_read(self: Register):
+#     self.bits[:] = rand_Bits(0x0, 0xFFFFFFFF, 32)
+#     return self.bits
+
+
+# def register_write(self: Register, value):
+#     self.bits[:] = value

@@ -1,48 +1,108 @@
-# import dearpygui.dearpygui as dpg
+from __future__ import annotations
 
-# dpg.create_context()
-# dpg.create_viewport(title="Custom Title", width=600, height=200)
-# dpg.setup_dearpygui()
-# dpg.set_global_font_scale(3.0)
-# with dpg.window(
-#     label="Example Window",
-#     no_title_bar=True,
-#     no_move=True,
-#     no_collapse=True,
-#     width=600,
-#     height=200,
-# ):  # type: ignore
-#     dpg.add_text("Hello, world")
+import weakref
+from dataclasses import dataclass, fields
+from typing import Dict, Generic, Optional, Type, TypeVar
 
-# dpg.show_viewport()
-
-# # below replaces, start_dearpygui()
-# while dpg.is_dearpygui_running():
-#     # insert here any code you would like to run in the render loop
-#     # you can manually stop by using stop_dearpygui()
-#     print("this will run every frame")
-#     dpg.render_dearpygui_frame()
-
-# dpg.destroy_context()
+T = TypeVar("T")
 
 
-from screeninfo import get_monitors
+class HasParent:
+    """混入类，提供父节点引用（弱引用）"""
+
+    _parent: Optional[weakref.ref] = None
+
+    def set_parent(self, parent):
+        self._parent = weakref.ref(parent)
+
+    @property
+    def parent(self):
+        if self._parent is None:
+            raise ValueError("Parent not set")
+        return self._parent()
+
+    def _find_up(self, parent_type: Type[T]) -> T:
+        """向嵌套上级查找"""
+        obj = self.parent
+        while obj:
+            if isinstance(obj, parent_type):
+                return obj
+            obj = obj.parent
+        raise ValueError(f"No parent of type {parent_type} found")
 
 
-def get_screen_metrics():
-    for m in get_monitors():
-        # 物理尺寸单位是毫米，分辨率单位是像素
-        width_inches = m.width_mm / 25.4
-        height_inches = m.height_mm / 25.4
-        dpi = m.width / width_inches
+@dataclass
+class Field(HasParent):
+    """寄存器字段"""
 
-        print(f"屏幕: {m.name}")
-        print(f"分辨率: {m.width}x{m.height}")
-        print(f"物理尺寸: {m.width_mm}mm x {m.height_mm}mm")
-        print(f"对角线尺寸: {(width_inches**2 + height_inches**2) ** 0.5:.2f} 英寸")
-        print(f"DPI: {dpi:.2f}\n")
-        print(f"系统缩放比例: {(dpi / 96):.2f}")
+    range: tuple[int, int] = (0, 0)
+    width: int = 0
+    default: int = 0
+
+    @property
+    def uReg(self) -> Register:
+        return self._find_up(Register)
+
+    @property
+    def uGup(self) -> RegGroup:
+        return self._find_up(RegGroup)
 
 
-if __name__ == "__main__":
-    get_screen_metrics()
+@dataclass
+class Register(HasParent):
+    address: int
+
+    def __post_init__(self):
+        for f in fields(self):
+            if f.name in ["address"]:
+                continue
+            attr = getattr(self, f.name)
+            if isinstance(attr, Field):
+                attr.set_parent(self)
+
+
+@dataclass
+class RegGroup(HasParent):
+    range: tuple[int, int] = (0, 0)
+
+    def __post_init__(self):
+        for f in fields(self):
+            if f.name in ["range"]:
+                continue
+            attr = getattr(self, f.name)
+            if isinstance(attr, Register):
+                attr.set_parent(self)
+
+
+# use
+
+
+@dataclass
+class GLB_CTL(Register):
+    address: int = 0x1234_5678
+    MODE: Field = Field(range=(3, 0), width=4, default=0b0000)
+    SPEED_SEL: Field = Field(range=(15, 4), width=12, default=0b1000_0000_0000)
+    ID: Field = Field(range=(31, 16), width=16, default=0b0000_0000_0000_0000)
+
+
+@dataclass
+class SPI_CTL(Register):
+    address: int = 0x1234_5600
+    MODE_SEL: Field = Field(range=(3, 0), width=4, default=0b0000)
+    SPEED_SEL: Field = Field(range=(15, 4), width=12, default=0b1000_0000_0000)
+    SUB_ADDR: Field = Field(range=(31, 16), width=16, default=0b0000_0000_0000_0000)
+
+
+@dataclass
+class STM32_REG_GROUP(RegGroup):
+    range: tuple[int, int] = (0, 0xFFFFFFFF)
+    GLB_CTL: GLB_CTL = GLB_CTL()
+    SPI_CTL: SPI_CTL = SPI_CTL()
+
+
+STM32_REG = STM32_REG_GROUP()
+
+
+reg = STM32_REG.GLB_CTL
+print(f"{reg.address = }")
+print(f"{reg.SPEED_SEL.default = }")

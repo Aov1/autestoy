@@ -2,12 +2,13 @@
 
 import re
 import time
-from typing import Generator, Self
+from typing import Generator, Iterable, Self
 
 from telnetlib3.sync import TelnetConnection
 
 from autestoy.tools.ansi import remove_ansi
 
+from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import PROMPT_pattern as prompt_pattern_default
 from ..export.term import Term
 from ..tools.record import CmdRecord
@@ -36,8 +37,10 @@ class TelnetConfig:
         return self
 
 
+@collect(CollectType.Telnet, CollectObj)
 class Telnet:
     def __init__(self, telnet_conf: TelnetConfig) -> None:
+        """基础的Telnet功能，非终端链接；终端交互请使用TelnetShell"""
         self.conf = telnet_conf
         self.name = telnet_conf.name
         self.tel3 = TelnetConnection(
@@ -77,12 +80,12 @@ class TelnetShell(Telnet):
     def __init__(
         self,
         telnet_conf: TelnetConfig,
-        user_and_password: tuple[str | None, str | None] = (None, None),
+        user_and_password: tuple[str, str] | None = None,
         prompt_pattern: str = prompt_pattern_default,
     ) -> None:
         super().__init__(telnet_conf)
-        self.user: str | None = user_and_password[0]
-        self.password: str | None = user_and_password[1]
+        self.user: str | None = user_and_password[0] if user_and_password else None
+        self.password: str | None = user_and_password[1] if user_and_password else None
 
         self.prompt_pattern = re.compile(prompt_pattern)
 
@@ -145,3 +148,24 @@ class TelnetShell(Telnet):
             record.result_append(line, timestamp)
         record.record_end()
         return record
+
+    def shell_run_lines(self, *cmds: str | Iterable[str]) -> list[CmdRecord[str]]:
+        """执行多条shell命令，返回输出列表"""
+        results = []
+        for cmd in cmds:
+            if isinstance(cmd, str):
+                if "\n" in cmd:
+                    cmd_list = cmd.replace("\r\n", "\n").split("\n")
+                    cmd_list = [
+                        e.strip()
+                        for e in cmd_list
+                        if e.strip() != "" and not e.startswith("#")
+                    ]
+                    for line in cmd_list:
+                        results.append(self.shell_run(line))
+                else:
+                    results.append(self.shell_run(cmd))
+            else:
+                for each in cmd:
+                    results.extend(self.shell_run_lines(each))
+        return results

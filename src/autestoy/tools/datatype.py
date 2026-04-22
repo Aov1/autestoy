@@ -15,7 +15,6 @@ from typing import (
     override,
 )
 
-import numpy as np
 from numpy.typing import NDArray
 
 
@@ -135,27 +134,27 @@ def get_value_width(value: int) -> int:
     return width
 
 
-def num2bytes(value: int, width: int | None = None) -> NDArray:
-    if value < 0:
-        raise ValueError(f"Invalid negative integer: {value}")
-    # if width is None:
-    width = width if width else 0
-    if width <= 0:
-        width = get_value_width(value)
+# def num2bytes(value: int, width: int | None = None) -> NDArray:
+#     if value < 0:
+#         raise ValueError(f"Invalid negative integer: {value}")
+#     # if width is None:
+#     width = width if width else 0
+#     if width <= 0:
+#         width = get_value_width(value)
 
-    value = value % (1 << width)
-    bytes_cnt = (width + 7) // 8
+#     value = value % (1 << width)
+#     bytes_cnt = (width + 7) // 8
 
-    bytes = value.to_bytes(bytes_cnt)
-    barray = np.frombuffer(bytes, dtype=np.uint8)[::-1]
-    return barray
+#     bytes = value.to_bytes(bytes_cnt)
+#     barray = np.frombuffer(bytes, dtype=np.uint8)[::-1]
+#     return barray
 
 
-def bytes2num(bytes: NDArray[np.uint8]) -> int:
-    value = 0
-    for i, byte in enumerate(bytes):
-        value += byte << (i * 8)
-    return value
+# def bytes2num(bytes: NDArray[np.uint8]) -> int:
+#     value = 0
+#     for i, byte in enumerate(bytes):
+#         value += byte << (i * 8)
+#     return value
 
 
 def slice_width(start: int, stop: int) -> int:
@@ -1015,6 +1014,127 @@ class Bits:
         else:
             raise TypeError(f"Bits.__rsub__ Unsupported type: {type(other)}")
 
+    def __mul__(self, other: int | str | Bits | bool) -> Bits:
+        """支持 * 运算符号，结果的位宽以左侧乘数为基准，因此右侧乘数支持无位宽表示"""
+        if isinstance(other, Bits):
+            return Bits(self.value * other.value, self.width)
+        elif isinstance(other, str):
+            return self.__mul__(Bits(other, self.width))
+        elif isinstance(other, bool):
+            return self.__mul__(Bits(other))
+        elif isinstance(other, int):
+            return Bits(self.value * other, self.width)
+        else:
+            raise TypeError(f"Bits.__mul__ Unsupported type: {type(other)}")
+
+    def __rmul__(self, other: str | Bits) -> Bits:
+        """支持 * 运算符的左乘，位宽以左侧为准，因此左乘数值支持有位宽表示"""
+        if isinstance(other, Bits):
+            return Bits(other.value * self.value, other.width)
+        elif isinstance(other, str):
+            return Bits(other) * self
+        else:
+            raise TypeError(f"Bits.__rmul__ Unsupported type: {type(other)}")
+
+    def __imul__(self, other: int | str | Bits | bool) -> Self:
+        """支持 *= 符号运算，返回自身，位宽不变"""
+        if isinstance(other, (bool, int)):
+            self.value *= other
+        elif isinstance(other, Bits):
+            self.value *= other.value
+        elif isinstance(other, str):
+            self.value *= Bits(other, self.width).value
+        else:
+            raise TypeError(f"Bits.__imul__ Unsupported type: {type(other)}")
+        return self
+
+    def __floordiv__(self, other: int | str | Bits | bool) -> Bits:
+        """支持 // 运算符的右向整除，位宽以被除数为准，返回一个新的Bits实例"""
+        if isinstance(other, (bool, int)):
+            return Bits(self.value // other, self.width)
+        elif isinstance(other, Bits):
+            return Bits(self.value // other.value, self.width)
+        elif isinstance(other, str):
+            return Bits(self.value // Bits(other, self.width).value, self.width)
+        else:
+            raise TypeError(f"Bits.__floordiv__ Unsupported type: {type(other)}")
+
+    def __rfloordiv__(self, other: str | Bits | bool) -> Bits:
+        """支持 // 运算符的左除法，位宽以左值为准，返回一个新的Bits实例"""
+        if isinstance(other, Bits):
+            return other // self
+        elif isinstance(other, (bool, str)):
+            return Bits(other) // self
+        else:
+            raise TypeError(f"Bits.__rfloordiv__ Unsupported type: {type(other)}")
+
+    def __ifloordiv__(self, other: int | bool | Bits | str) -> Self:
+        """支持 //= 运算符"""
+        if isinstance(other, Bits):
+            self.value //= other.value
+        elif isinstance(other, (bool, int)):
+            self.value //= other
+        elif isinstance(other, str):
+            self.value //= Bits(other, self.width).value
+        else:
+            raise TypeError(f"Bits.__ifloordiv__ Unsupported type: {type(other)}")
+        return self
+
+    def __truediv__(self, other: int | bool | Bits | str) -> Bits:
+        """支持 / 运算符，转换为//"""
+        return self // other
+
+    def __rtruediv__(self, other: bool | Bits | str) -> Bits:
+        """支持 / 运算符的右向除法，转换为 //"""
+        return self // other
+
+    def __itruediv__(self, other: int | bool | str | Bits) -> Self:
+        """支持 /= 运算符，转换为 //="""
+        return self.__ifloordiv__(other)
+
+    def __mod__(self, other: int | bool | Bits | str) -> Bits:
+        """支持 % 运算符，不对于右值判断位数，使用实际值"""
+        if isinstance(other, Bits):
+            return Bits(self.value % other.value, self.width)
+        elif isinstance(other, str):
+            return (
+                self % str2int(other)[1]
+            )  # 字符串转换为int，允许不明确位宽，如果有位宽仍然会截断
+        elif isinstance(other, bool):
+            return self % Bits(int(other), self.width)
+        elif isinstance(other, int):
+            return Bits(self.value % other, self.width)
+        else:
+            raise TypeError(f"Bits.__mod__ Unsupported type: {type(other)}")
+
+    def __rmod__(self, other: Bits | str | bool) -> Bits:
+        """支持 % 运算符的右向取模，值支持位宽带有位宽标识的数据"""
+        if isinstance(other, Bits):
+            return other % self
+        elif isinstance(other, str):
+            return Bits(other) % self
+        elif isinstance(other, bool):
+            return Bits(other) % self
+        else:
+            raise TypeError(f"Bits.__rmod__ Unsupported type: {type(other)}")
+
+    def __imod__(self, other: Bits | str | int | bool) -> Self:
+        if isinstance(other, Bits):
+            self.value %= other.value
+        elif isinstance(other, (int, bool)):
+            self.value %= other
+        elif isinstance(other, str):
+            self.value %= str2int(other)[1]
+        else:
+            raise TypeError(f"Bits.__imod__ Unsupported type: {type(other)}")
+        return self
+
+    def __divmod__(self, other: Bits | str | int | bool) -> tuple[Bits, Bits]:
+        return self // other, self % other
+
+    def __rdivmod__(self, other: Bits | str | bool) -> tuple[Bits, Bits]:
+        return self.__rfloordiv__(other), self.__rmod__(other)
+
     def __rshift__(self, other: int) -> Bits:
         """支持 >> 运算符的右向移位"""
         if isinstance(other, int):
@@ -1133,6 +1253,40 @@ class Bits:
     def __float__(self) -> float:
         """支持 `float()` 转换，返回Bits实例的值"""
         return float(self.value)
+
+    def __matmul__(self, other: Bits | str | bool) -> Bits:
+        """支持 `@` 运算符进行Bits拼接，返回一个新的Bits实例，需要明确位宽，不支持单int"""
+        if isinstance(other, Bits):
+            return self.concat(other)
+        elif isinstance(other, (str, bool)):
+            return self.concat(Bits(other))
+        else:
+            raise TypeError(
+                f"Bits @ other -> Bits.concat: Unsupported type: {type(other)}"
+            )
+
+    def __rmatmul__(self, other: Bits | str | bool) -> Bits:
+        """支持 `@` 运算符进行Bits拼接，返回一个新的Bits实例，需要明确位宽，不支持单int"""
+        if isinstance(other, Bits):
+            return other.concat(self)
+        elif isinstance(other, (str, bool)):
+            return Bits(other).concat(self)
+        else:
+            raise TypeError(
+                f"other @ Bits -> Bits.concat: Unsupported type: {type(other)}"
+            )
+
+    def __imatmul__(self, other: Bits | str | bool) -> Self:
+        """支持 `@=` 运算符进行Bits拼接，修改自身，需要明确位宽，不支持单int"""
+        if isinstance(other, Bits):
+            self.append(other)
+        elif isinstance(other, (str, bool)):
+            self.append(Bits(other))
+        else:
+            raise TypeError(
+                f"Bits @= other -> Bits.append: Unsupported type: {type(other)}"
+            )
+        return self
 
 
 class BitView(Bits):

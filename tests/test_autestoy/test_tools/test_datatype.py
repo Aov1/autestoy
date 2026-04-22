@@ -10,7 +10,6 @@ from autestoy.tools.datatype import (
     Register,
     fmt_in_base,
     insert_every_n,
-    num2bytes,
     rand_Bits,
     str2num,
     sum_Bits,
@@ -85,14 +84,14 @@ def test_str2num():
     print("填充字符串 ok")
 
 
-def test_num2bits():
-    assert num2bytes(1, 1) == np.array([1], dtype=np.uint8)
-    assert num2bytes(1, 8) == np.array([1], dtype=np.uint8)
-    assert (
-        num2bytes(0x12345678, 32).all()
-        == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
-    )
-    print("num2bits ok")
+# def test_num2bits():
+#     assert num2bytes(1, 1) == np.array([1], dtype=np.uint8)
+#     assert num2bytes(1, 8) == np.array([1], dtype=np.uint8)
+#     assert (
+#         num2bytes(0x12345678, 32).all()
+#         == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
+#     )
+#     print("num2bits ok")
 
 
 def test_insert_every_n():
@@ -535,6 +534,49 @@ def test_Bits_invert():
     assert ~t == Bits(0b0101, 4)
     t.invert()
     assert t == Bits(0b0101, 4)
+
+
+def test_Bits_mul():
+    t = Bits(0b1010, 4)
+    assert t * 2 == Bits(0b10100, 4)
+
+    t = Bits(0b1010, 4)
+    assert t * 0 == Bits(0b0000, 4)
+
+    t1 = Bits(100, 32)
+    t2 = Bits(100, 32)
+    assert t1 * t2 == Bits(10000, 32)
+
+
+def test_Bits_div():
+    t1 = Bits(100, 32)
+    t2 = Bits(10, 32)
+    assert t1 / t2 == t1 // t2 == Bits(10, 32)
+
+
+def test_Bits_mod():
+    t1 = Bits(123, 16)
+    assert t1 % 10 == Bits(3, 16)
+    assert t1 % 100 == Bits(23, 16)
+    assert t1 % 1000 == Bits(123, 16)
+    assert t1 % 10000 == Bits(123, 16)
+
+
+def test_Bits_matmul_symbol():
+    t = Bits(0b1010, 4)
+    assert t @ t == Bits(0b10101010, 8)
+    assert t @ "4'b1111" == Bits(0b10101111, 8)
+    assert t @ True == Bits(0b10101, 5)
+    assert t @ False == Bits(0b10100, 5)
+
+    t = Bits(None)
+    assert t @ t == Bits(None)
+    assert t @ "0b1111_u4" == Bits(0b1111, 4)
+
+    t @= "3'b111"
+    assert t == Bits(0b111, 3)
+    t @= Bits("0b0101", 4)
+    assert t == Bits(0b1110101, 7)
 
 
 def test_BitView():

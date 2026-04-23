@@ -1292,6 +1292,9 @@ class Bits:
             )
         return self
 
+    def __hash__(self) -> int:
+        return hash((self.value, self.width))
+
 
 class BitView(Bits):
     """用于对Bits类实例的借用，实质上是维护了一个指向Bits的指针和范围，作出异步读取与修改\n

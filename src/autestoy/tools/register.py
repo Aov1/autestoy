@@ -33,18 +33,20 @@ class HasParent:
         raise ValueError(f"No parent of type {parent_type} found")
 
 
-@dataclass
+@dataclass(slots=True)
 class Field(HasParent):
     """寄存器字段"""
 
-    range: tuple[int, int]
+    bit_range: tuple[int, int]
     default: Bits = Bits(None)
-    info: str = ""
     select: dict[Bits, str] = {}
+    R: Optional[bool] = None
+    W: Optional[bool] = None
+    info: str = ""
 
     @property
     def width(self) -> int:
-        return abs(self.range[0] - self.range[1]) + 1
+        return abs(self.bit_range[0] - self.bit_range[1]) + 1
 
     @property
     def uReg(self) -> Register:
@@ -55,16 +57,29 @@ class Field(HasParent):
         return self._find_up(RegGroup)
 
 
-@dataclass
+@dataclass(slots=True)
 class Register(HasParent):
     address: Addr32 | Addr64 | Bits
     info: str = ""
     _default_value: Bits = Bits(None)
     _default_pattern: Bits = Bits(None)
+    _offset_from_base: Bits = Bits(None)
+
+    @property
+    def offset(self) -> Bits:
+        if self._offset_from_base == Bits(None):
+            raise ValueError("offset_from_base is not set")
+        return self._offset_from_base
 
     def __post_init__(self):
         for f in fields(self):
-            if f.name in ["address", "info", "_default_value", "_default_pattern"]:
+            if f.name in [
+                "address",
+                "info",
+                "_default_value",
+                "_default_pattern",
+                "_offset_from_base",
+            ]:
                 continue
             attr = getattr(self, f.name)
             if isinstance(attr, Field):
@@ -80,7 +95,13 @@ class Register(HasParent):
         self._default_value = Bits(None)
         self._default_pattern = Bits(None)
         for f in fields(self):
-            if f.name in ["address", "info", "_default_value", "_default_pattern"]:
+            if f.name in [
+                "address",
+                "info",
+                "_default_value",
+                "_default_pattern",
+                "_offset_from_base",
+            ]:
                 continue
             attr = getattr(self, f.name)
             if isinstance(attr, Field):
@@ -94,14 +115,52 @@ class Register(HasParent):
         return self._default_pattern, self._default_value
 
 
-@dataclass
+@dataclass(slots=True)
 class RegGroup(HasParent):
-    range: tuple[Addr32 | Addr64 | Bits | int, Addr32 | Addr64 | Bits | int]
+    """寄存器组，支持嵌套类本身"""
+
+    base_address: Addr32 | Addr64 | Bits
+    end_address: Addr32 | Addr64 | Bits
+
+    @property
+    def range(self):
+        return self.base_address, self.end_address
 
     def __post_init__(self):
         for f in fields(self):
             if f.name in ["range"]:
                 continue
             attr = getattr(self, f.name)
-            if isinstance(attr, Register):
+            if isinstance(attr, (Register, RegGroup)):
                 attr.set_parent(self)
+            if isinstance(attr, Register):
+                attr._offset_from_base = attr.address - self.base_address
+
+
+user_help = """
+本文件中的类用于定义地址空间枚举，参照了CH32H417 4GB inline address space 结构
+结构：
+Class-AddressSpace:
+    .base_address : Addr32 | Addr64 | Bits
+    .end_address : Addr32 | Addr64 | Bits
+    .range : tuple[Addr32 | Addr64 | Bits, Addr32 | Addr64 | Bits]
+    Class-RegGroup(s):
+        .range : tuple[Addr32 | Addr64 | Bits, Addr32 | Addr64 | Bits]
+        .base_address : Addr32 | Addr64 | Bits
+        Class-Register:
+            .address : Addr32 | Addr64 | Bits
+            .offset : Bits
+            .info : str
+            .default : tuple[Bits, Bits]
+            Class-Field:
+                .bit_range : tuple[int,int]
+                .default : Bits
+                .info : str
+                .select : dict[Bits,str]
+    Class-MemGroup(s):
+        .range : tuple[Addr32 | Addr64 | Bits, Addr32 | Addr64 | Bits]
+        .base_address : Addr32 | Addr64 | Bits
+
+
+
+"""

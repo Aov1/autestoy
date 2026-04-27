@@ -1,5 +1,7 @@
 """实现脚本输出收集，通过装饰器等"""
 
+from __future__ import annotations
+
 from enum import StrEnum, auto
 from functools import wraps
 

@@ -1,5 +1,7 @@
 """一些对于终端ANSI转义序列的处理工具"""
 
+from __future__ import annotations
+
 import re
 from enum import StrEnum
 from typing import TypeVar, overload

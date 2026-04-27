@@ -2,6 +2,8 @@
 生成obsidian格式的导出文件相关工具（markdown + mermaid）
 """
 
+from __future__ import annotations
+
 import inspect
 import os
 

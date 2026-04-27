@@ -1,5 +1,7 @@
 """串口协议"""
 
+from __future__ import annotations
+
 import re
 import time
 

@@ -24,11 +24,21 @@ __all__ = [
     "GlobalTimeBase",
 ]
 
-# 脚本的基础时间
-GlobalTimeBase = Timestamp()
-# 终端显示相对时间的计算基时
-Term.set_time_base(GlobalTimeBase)
-# 导入库时显示本地时间
-Term.putsln(
-    f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}[INFO] Srcipt start at [{Term.time_base}]{AnsiReset}"
-)
+GlobalTimeBase: Timestamp | None = None
+
+
+def init() -> Timestamp:
+    """初始化函数:\n
+    初始化全局时间戳 GlobalTimeBase;\n
+
+    """
+    # 脚本的基础时间
+    global GlobalTimeBase
+    GlobalTimeBase = Timestamp()
+    # 终端显示相对时间的计算基时
+    Term.set_time_base(GlobalTimeBase)
+    # 导入库时显示本地时间
+    Term.putsln(
+        f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}[INFO] Srcipt start at [{Term.time_base}]{AnsiReset}"
+    )
+    return GlobalTimeBase

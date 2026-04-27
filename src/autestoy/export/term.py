@@ -2,6 +2,8 @@
 关于终端输出
 """
 
+from __future__ import annotations
+
 import shutil
 import sys
 

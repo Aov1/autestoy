@@ -1,8 +1,9 @@
 """提供协议绑定、通用方法，需要使用者自行配置"""
 
+from __future__ import annotations
+
 # import inspect
 # import pathlib
-
 from types import MethodType
 from typing import Callable, Type, TypeVar, Union
 

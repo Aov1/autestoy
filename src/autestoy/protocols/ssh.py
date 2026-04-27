@@ -45,9 +45,25 @@ _Callback: TypeAlias = Callable[[int, int], object]
 
 
 class RemoteConfig:
-    """远程配置类，用于配置远程主机的连接信息"""
+    """远程配置类，用于配置远程主机的连接信息。
+
+    属性:
+        user: 用户名
+        ip: 主机IP地址
+        password: 密码
+        port: SSH端口号，默认22
+        name: 远程主机显示名称，默认为 "user@ip"
+    """
 
     def __init__(self, user: str, ip: str, password: str, port: int = 22) -> None:
+        """初始化远程配置。
+
+        Args:
+            user: 登录用户名
+            ip: 主机IP地址
+            password: 登录密码
+            port: SSH端口号，默认为22
+        """
         self.user = user
         self.ip = ip
         self.password = password
@@ -55,7 +71,17 @@ class RemoteConfig:
         self.name = f"{user}@{ip}"
 
     def set_name(self, name: str) -> Self:
-        """设置远程主机的名称，不设置默认使用user名称"""
+        """设置远程主机的显示名称。
+
+        如果不调用此方法，默认名称格式为 "user@ip"。
+        此方法返回自身实例，支持链式调用。
+
+        Args:
+            name: 自定义的名称
+
+        Returns:
+            Self: 返回自身实例
+        """
         self.name = name
         return self
 

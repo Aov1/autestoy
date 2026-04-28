@@ -15,7 +15,7 @@ from typing import (
     override,
 )
 
-from numpy.typing import NDArray
+# from numpy.typing import NDArray
 
 
 def str2num(s: str) -> tuple[int, int | float]:

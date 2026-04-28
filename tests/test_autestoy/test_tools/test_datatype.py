@@ -1,12 +1,19 @@
-import numpy as np
+# import numpy as np
+import pytest
 
 from autestoy.tools.datatype import (
+    Addr32,
+    Addr64,
     Bits,
+    BitView,
+    # Field,
+    # Register,
     fmt_in_base,
     insert_every_n,
-    num2bytes,
+    rand_Bits,
     str2num,
-    width_in_base,
+    sum_Bits,
+    sum_value_Bits,
 )
 
 
@@ -77,14 +84,14 @@ def test_str2num():
     print("填充字符串 ok")
 
 
-def test_num2bits():
-    assert num2bytes(1, 1) == np.array([1], dtype=np.uint8)
-    assert num2bytes(1, 8) == np.array([1], dtype=np.uint8)
-    assert (
-        num2bytes(0x12345678, 32).all()
-        == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
-    )
-    print("num2bits ok")
+# def test_num2bits():
+#     assert num2bytes(1, 1) == np.array([1], dtype=np.uint8)
+#     assert num2bytes(1, 8) == np.array([1], dtype=np.uint8)
+#     assert (
+#         num2bytes(0x12345678, 32).all()
+#         == np.array([0x78, 0x56, 0x34, 0x12], dtype=np.uint8).all()
+#     )
+#     print("num2bits ok")
 
 
 def test_insert_every_n():
@@ -148,6 +155,12 @@ def test_Bits_init():
     assert t.value == 0b1111_1010_1111_0000
     assert t.width == 16
 
+    t = Bits([(0x1234, 16), ("0x5678", 16)])
+    assert t.value == 0x12345678
+
+    t = Bits(["16'h1234", "0x5678_u16", (0x90AB, 16), Bits(0xCDEF, 16)])
+    assert t.value == 0x1234567890ABCDEF
+    assert t.width == 64
     print("Bits.__init__() ok")
 
 
@@ -181,7 +194,464 @@ def test_Bits_getitem():
 def test_Bits_str():
     t = Bits(0x0123_4567_89AB_CEDF, 64)
     Bits.set_str_type(16)
-    assert str(t) == "0x0123_4567_89AB_CEDF"
+    assert str(t) == "0x0123456789ABCEDF"
     t = Bits(0o123_456_765, 25)
     Bits.set_str_type(8)
-    assert str(t) == "0o123_456_765"
+    assert str(t) == "0o123456765"
+
+    t = Bits(0x8F, 8)
+    assert bin(t) == "0b10001111"
+    assert oct(t) == "0o217"
+    assert hex(t) == "0x8f"
+
+
+def test_Bits_format():
+    Bits.set_str_type(16)
+    t = Bits(0x1234_5678, 32)
+    assert str(t) == "0x12345678"
+    print(f"{t:,2}")
+    print(f"{t:4b}")
+    print(f"{t:3vh}")
+    print(f"{t:@4vh}")
+    print(f"{t:vh}")
+    print(f"{t:O}")
+    print(f"{t:d}")
+    print(f"{t:-1VD}")
+
+
+def test_Bits_fix():
+    Bits.set_str_type(16)
+    t = Bits(0x0123_4567_89AB_CEDF, 64)
+    assert str(t) == "0x0123456789ABCEDF"
+    t.value = 0x87654321
+    assert str(t) == "0x0000000087654321"
+    t.width = 8
+    assert str(t) == "0x21"
+    t.width = 0
+    assert str(t) == "0x0"
+    print(t, f"{t = }")
+
+
+def test_Bits__split_range():
+    t = Bits(0x1234_5678, 32)
+    assert t._split_range(0) == ((31, 0x1234_5678 >> 1), (0, 0))
+    assert t._split_range(15) == ((16, 0x1234), (15, 0x5678 & (0xFFFF >> 1)))
+    assert t._split_range((0, 15)) == ((0, 0), (16, 0x5678))
+    assert t._split_range((15, 0)) == ((16, 0x1234), (0, 0))
+    assert t._split_range((12, 15)) == ((12, 0x123), (16, 0x5678))
+    assert t._split_range((15, 12)) == ((16, 0x1234), (12, 0x678))
+
+
+def test_Bits_set_bits():
+    t = Bits(0x1234_5670, 32)
+    t.set_bits(0, 0x8765_4321)
+    assert t.value == 0x1234_5671
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((0, 15), 0x4321)
+    assert t.value == 0x4321_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 0), 0x8765)
+    assert t.value == 0x1234_8765
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((12, 15), 0xF)
+    assert t.value == 0x123F_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 12), 0xF)
+    assert t.value == 0x1234_F678
+
+    t = Bits(0x1234_5670, 32)
+    t.set_bits(0, "0x8765_4321")
+    assert t.value == 0x1234_5671
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((0, 15), "16'h4321")
+    assert t.value == 0x4321_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((0, 15), "12'h4321")
+    assert t.value == 0x0321_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 0), "0x8765")
+    assert t.value == 0x1234_8765
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((12, 15), "0b1111")
+    assert t.value == 0x123F_5678
+
+    t = Bits(0x1234_5678, 32)
+    t.set_bits((15, 12), "0xFF")
+    assert t.value == 0x1234_F678
+
+
+def test_Bits___setitem__():
+    t = Bits(0x1234_5678, 32)
+    t[0] = 1
+    assert t.value == 0x1234_5679
+
+    t = Bits(0x1234_5678, 32)
+    t[15:0] = 0xFFFF
+    assert t.value == 0x1234_FFFF
+
+    t = Bits(0x1234_5678, 32)
+    t[0:15] = Bits("16'hffff")
+    assert t.value == 0xFFFF_5678
+
+    t = Bits(0x1234_5678, 32)
+    t[0:15] = "16'hffffff"
+    assert t.value == 0xFFFF_5678
+
+    t = Bits(0x1234_5678, 32)
+    t[0:15] = "32'hffff_ffff"
+    assert t.value == 0xFFFF_5678
+
+    t = Bits(0x0000_0000, 32)
+    t[0] = 1  # Bits(0x0000_0001, 32)
+    assert t.value == 0x0000_0001
+    t[4:] = 1  # Bits(0x0000_0011, 32)
+    assert t.value == 0x0000_0011
+    t[:3] = 1  # Bits(0x1000_0011, 32)
+    assert t.value == 0x1000_0011
+
+    t = Bits(0x0000_0000, 32)
+    t[0:, 1, 2:, 3, 11:8, 0:7] = 0xFFFFFFFF
+    assert t.value == 0xFF00_0F0F
+
+
+def test_Bits_split_iter():
+    t = Bits(0x1234_5678, 32)
+    it = t.split_iter(4)
+    assert next(it) == Bits("0x1_u4")
+    assert next(it) == Bits("0x2_i4")
+    assert next(it) == Bits("4'h3")
+    assert next(it) == Bits("4'b0100")
+    assert next(it) == Bits("0x5_u4")
+    assert next(it) == Bits("0x6_u4")
+    assert next(it) == Bits("0x7_u4")
+    assert next(it) == Bits("0x8_u4")
+    with pytest.raises(StopIteration):
+        next(it)
+
+    t = Bits(0b10_1010_1010_1010_1010_1010_1010_10101, 31)
+    it = t.split_iter(3, right_align=False)
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b1_u1")
+    with pytest.raises(StopIteration):
+        next(it)
+
+    t = Bits(0b101_010_101_1, 10)
+    it = t.split_iter(3, right_align=False, from_left=False)
+    assert next(it) == Bits("0b1_u1")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    with pytest.raises(StopIteration):
+        next(it)
+
+    t = Bits(0b1_101_010_101, 10)
+    it = t.split_iter(3, from_left=False)
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b010_u3")
+    assert next(it) == Bits("0b101_u3")
+    assert next(it) == Bits("0b1_u1")
+    with pytest.raises(StopIteration):
+        next(it)
+
+
+def test_Bits_remove():
+    t = Bits(0x12345678, 32)
+    rm = t.remove((4, 15))
+    assert rm == Bits(0x234, 12)
+    assert t == Bits(0x15678, 20)
+    rm = t.remove((0, 19))
+    assert rm == Bits(0x15678, 20)
+    assert t == Bits(None)
+
+    t = Bits(0b1111_1101_1111_0000, 16)
+    rm = t.remove(9)
+    assert rm == Bits(0, 1)
+    assert t == Bits(0b1111_111_1111_0000, 15)
+
+    t = Bits(0x12345678, 32)
+    rm = t.remove((0, 15))
+    assert rm == Bits(0x1234, 16)
+    assert t == Bits(0x5678, 16)
+
+
+def test_Bits_pop():
+    t = Bits(0x12345678, 32)
+    pop = t.pop(16)
+    assert pop == Bits(0x5678, 16)
+    assert t == Bits(0x1234, 16)
+
+    t = Bits(0x12345678, 32)
+    pop = t.pop(8, from_low_bit=False)
+    assert pop == Bits(0x12, 8)
+    assert t == Bits(0x345678, 24)
+
+    t = Bits(0x1234, 16)
+    pop = t.pop(16)
+    assert t == Bits(None)
+    assert pop == 0x1234
+
+
+def test_Bits_append():
+    t = Bits(0x1234, 16)
+    t.append(Bits(0x5678, 16))
+    assert t == Bits(0x12345678, 32)
+
+    t = Bits(0x1, 4)
+    t.append(Bits(0x2, 4), Bits(0x3, 4))
+    assert t == Bits(0x123, 12)
+
+
+def test_Bits_concat():
+    res = Bits(0x1234, 16).concat(Bits(0x5678, 16))
+    assert res == Bits(0x12345678, 32)
+
+
+def test_Bits_get_value():
+    t = Bits(0x12345678, 32)
+    assert t._get_value(0) == 0x0
+    assert t._get_value(3) == 1
+    assert t._get_value((3, 0)) == 8
+    assert t._get_value((0, 15)) == 0x1234
+
+
+def test_Bits_add():
+    t = Bits(100, 32)
+    assert t + 100 == Bits(200, 32)
+    assert t + "100" == Bits(200, 32)
+    assert t + Bits(100, 32) == Bits(200, 32)
+    assert t + None == t
+
+    # assert 100 + t == Bits(200, 32) not supported because int dont have width
+    assert "100_u32" + t == Bits(200, 32)
+    assert None + t == t
+    t += Bits(100, 32)
+    assert t == Bits(200, 32)
+    t += 100
+    assert t == Bits(300, 32)
+    t += "100"
+    assert t == Bits(400, 32)
+    t += None
+    assert t == Bits(400, 32)
+
+    t = Bits(100, 32)
+    assert "200_u8" + t == Bits(300 - 256, 8)
+
+    assert sum_value_Bits(Bits(100, 32), Bits(200, 32), Bits(0, 64)) == Bits(300, 64)
+    assert sum_Bits(Bits(100, 32), Bits(200, 32), Bits(0, 64)) == Bits(300, 32)
+
+
+def test_Bits_sub():
+    t = Bits(200, 32)
+    assert t - 100 == Bits(100, 32)
+    assert t - "100" == Bits(100, 32)
+    assert t - Bits(100, 32) == Bits(100, 32)
+
+    t = Bits(100, 32)
+    assert "200_u8" - t == Bits(100, 8)
+    assert "200_u32" - t == Bits(100, 32)
+    assert None - t == 0
+
+    t = Bits(200, 32)
+    t -= 50
+    assert t == Bits(150, 32)
+    t -= "50"
+    assert t == Bits(100, 32)
+    t -= None
+    assert t == Bits(100, 32)
+
+
+def test_Bits_shift():
+    t = Bits(0x12345678, 32)
+    assert t << 4 == Bits(0x2345_6780, 32)
+    assert t >> 4 == Bits(0x0123_4567, 32)
+    assert t << 4 >> 4 == Bits(0x0234_5678, 32)
+    t <<= 4
+    assert t == Bits(0x2345_6780, 32)
+    t >>= 16
+    assert t == Bits(0x2345, 32)
+
+
+def test_Bits_and():
+    t = Bits(0b1111_0000, 8)
+    assert t & Bits(0, 4) == Bits(0b0000_0000, 8)
+    assert t & 0b0000_1111 == Bits(0b0000_0000, 8)
+    assert t & 0b0101_0000 == 0b0101_0000
+    assert t & "8'b1100_1111" == "0b1100_0000_u8"
+    assert t & True == "8'b0"
+    assert "8'b1100_0000" & t == "0b1100_0000_u8"
+    assert "4'b1111" & t == Bits(0, 4)
+    assert True & t == "1'b0"
+    assert Bits(0b1111_1111, 8) & t == Bits(0b1111_0000, 8)
+    t &= 0x80
+    assert t == Bits(0x80, 8)
+
+
+def test_Bits_or():
+    t = Bits(0b1100_0011, 8)
+    assert t | Bits(0b0011_0000, 8) == Bits(0b1111_0011, 8)
+    assert t | 0xF8 == Bits(0b1111_1011, 8)
+    assert t | "32'hFF" == Bits(0b1111_1111, 8)
+    assert t | True == Bits("8'b1100_0011")
+    assert Bits("32'hff") | t == Bits(0b1111_1111, 32)
+    assert "16'b1100" | t == Bits(0b1100_1111, 16)
+    assert True | t == "1'b1"
+    t |= 0x08
+    assert t == Bits(0b1100_1011, 8)
+
+
+def test_Bits_xor():
+    t = Bits(0b1001, 4)
+    assert t ^ Bits(0b0101, 4) == Bits(0b1100, 4)
+    assert t ^ 0b0101 == Bits(0b1100, 4)
+    assert t ^ "4'b0101" == Bits(0b1100, 4)
+    assert t ^ True == Bits("4'b1000")
+    assert Bits(0b1100, 4) ^ t == Bits(0b0101, 4)
+    assert "5'b11111" ^ t == Bits(0b10110, 5)
+    assert True ^ t == "1'b0"
+    t ^= 0b1111
+    assert t == Bits(0b0110, 4)
+
+
+def test_Bits_invert():
+    t = Bits(0b1010, 4)
+    assert ~t == Bits(0b0101, 4)
+    t.invert()
+    assert t == Bits(0b0101, 4)
+
+
+def test_Bits_mul():
+    t = Bits(0b1010, 4)
+    assert t * 2 == Bits(0b10100, 4)
+
+    t = Bits(0b1010, 4)
+    assert t * 0 == Bits(0b0000, 4)
+
+    t1 = Bits(100, 32)
+    t2 = Bits(100, 32)
+    assert t1 * t2 == Bits(10000, 32)
+
+
+def test_Bits_div():
+    t1 = Bits(100, 32)
+    t2 = Bits(10, 32)
+    assert t1 / t2 == t1 // t2 == Bits(10, 32)
+
+
+def test_Bits_mod():
+    t1 = Bits(123, 16)
+    assert t1 % 10 == Bits(3, 16)
+    assert t1 % 100 == Bits(23, 16)
+    assert t1 % 1000 == Bits(123, 16)
+    assert t1 % 10000 == Bits(123, 16)
+
+
+def test_Bits_matmul_symbol():
+    t = Bits(0b1010, 4)
+    assert t @ t == Bits(0b10101010, 8)
+    assert t @ "4'b1111" == Bits(0b10101111, 8)
+    assert t @ True == Bits(0b10101, 5)
+    assert t @ False == Bits(0b10100, 5)
+
+    t = Bits(None)
+    assert t @ t == Bits(None)
+    assert t @ "0b1111_u4" == Bits(0b1111, 4)
+
+    t @= "3'b111"
+    assert t == Bits(0b111, 3)
+    t @= Bits("0b0101", 4)
+    assert t == Bits(0b1110101, 7)
+
+
+def test_BitView():
+    t = Bits(0x12345678, 32)
+    v = BitView(t, (0, 15))
+    assert v == Bits(0x1234, 16)
+    v.value = 0x5678
+    assert t == Bits(0x56785678, 32)
+    assert v == Bits(0x5678, 16)
+    t.value = 0xFFFFFFFF
+    assert v == Bits(0xFFFF, 16)
+    # t.borrow((0, 15))
+
+
+def test_Addr32():
+    addr = Addr32(0x12345678)
+    assert addr == Bits(0x12345678, 32)
+    high16 = addr.borrow((0, 15))
+    assert high16 == 0x1234
+
+
+def test_Addr64():
+    addr = Addr64(0x12345678_90ABCDEF)
+    assert addr == Bits(0x12345678_90ABCDEF, 64)
+    assert addr.split() == [Bits(0x12345678, 32), Bits(0x90ABCDEF, 32)]
+
+
+# def test_Field():
+#     t = Bits(0x12345678, 32)
+#     data_h = Field(t, "DATA_H", (0, 15), 0xFFFF)
+#     data_l = Field(t, "DATA_L", (16, 31), "0x0000_u16")
+#     assert data_h.default_value == Bits(0xFFFF, 16)
+#     assert data_l.default_value == Bits(0x0000, 16)
+
+
+# def test_Register():
+#     address = Addr32(0x12345678)
+#     reg = Register(address)
+#     reg.add_field("DATA_H", (0, 15), 0xFFFF)
+#     reg.add_field("DATA_L", (16, 31), "0x0000_i16")
+#     assert reg.address == address
+#     assert reg.bits == Bits(0x0, 32)
+#     print(f"{reg.fields = }")
+#     assert reg.DATA_H == Bits(0x0, 16)
+#     assert reg.DATA_L == Bits(0x0, 16)
+
+#     reg.bits[:] = Bits(0x12345678, 32)
+#     assert reg.bits.value == 0x12345678
+#     reg.DATA_H[:] = 0x1234
+#     reg.DATA_L[:] = "0x5678_u16"
+#     assert reg.DATA_H == Bits(0x1234, 16)
+#     assert reg.DATA_L == Bits(0x5678, 16)
+
+#     reg.config_read_method(register_read)
+#     reg.config_write_method(register_write)
+#     reg.read()
+#     print(f"{reg.bits = }")
+#     reg.write(0x5678_ABCD)
+#     print(f"{reg.bits = }")
+#     for e in reg.fields:
+#         print(f"{e = }")
+#     assert reg.DATA_H == Bits(0x5678, 16)
+#     assert reg.DATA_L == Bits(0xABCD, 16)
+#     assert reg.bits == Bits(0x5678_ABCD, 32)
+
+#     reg.DATA_H.add_enum("MAX", 0xFFFF, "Maximum value")
+#     reg.DATA_H.select_enum("MAX")
+#     assert reg.DATA_H == Bits(0xFFFF, 16)
+#     assert reg.bits == Bits(0xFFFF_ABCD, 32)
+
+
+# def register_read(self: Register):
+#     self.bits[:] = rand_Bits(0x0, 0xFFFFFFFF, 32)
+#     return self.bits
+
+
+# def register_write(self: Register, value):
+#     self.bits[:] = value

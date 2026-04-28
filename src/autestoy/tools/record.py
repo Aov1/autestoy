@@ -8,6 +8,8 @@ import time
 # from enum import IntEnum, auto
 from typing import Generic, Iterator, override
 
+from paramiko.channel import ChannelFile as pk_ChannelFile
+from paramiko.channel import ChannelStderrFile as pk_ChannelStderrFile
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
 from ..export.term import Term, TermStyle
@@ -29,9 +31,9 @@ class CmdRecord(Generic[T]):
         cls._cmd_id += 1
         return cls._cmd_id
 
-    def __init__(self, cmd: str, prompt: str) -> None:
+    def __init__(self, cmd: str, prompt: str, create_id: bool = True) -> None:
         """初始化，为了减少运行时间的误差，请在发送命令前紧接该初始化"""
-        self.id: int = CmdRecord.id_generator()
+        self.id: int = CmdRecord.id_generator() if create_id else 0
         self.prompt: str = prompt
         self.start_time: Timestamp = Timestamp()
         self.end_time: Timestamp | None = None
@@ -39,6 +41,8 @@ class CmdRecord(Generic[T]):
         self.cmd: str = cmd
         self.result: list[tuple[Timestamp, Result[T]]] = []
         self.stdin: pk_ChannelStdinFile | None = None
+        self.stdout: pk_ChannelFile | None = None
+        self.stderr: pk_ChannelStderrFile | None = None
         self.exit_code: int | None = None
 
     def __contains__(self, string: str) -> bool:
@@ -79,7 +83,7 @@ class CmdRecord(Generic[T]):
     def get_fmt_prompt(self, colorful: bool = True) -> str:
         """获取格式化终端提示符，包括命令id、提示符和命令本身。\n
         终端显示和记录都基于此函数"""
-        tmp = f"{TermStyle.prompt_font_color}{TermStyle.prompt_background_color}[{self.id}]:{self.prompt}{AnsiReset} {TermStyle.msg_font_color}{TermStyle.msg_background_color}{self.cmd}{AnsiReset}"
+        tmp = f"{TermStyle.prompt_font_color}{TermStyle.prompt_background_color}{'[' + str(self.id) + ']' if self.id != 0 else ''}{self.prompt}{AnsiReset} {TermStyle.msg_font_color}{TermStyle.msg_background_color}{self.cmd}{AnsiReset}"
         if colorful:
             return tmp
         return remove_ansi(tmp)
@@ -91,10 +95,7 @@ class CmdRecord(Generic[T]):
     def get_result(self) -> list[str]:
         """获取命令的输出结果，去除Result，去除ansi转义\n
         对于非str类型的结果尝试转换为str"""
-        return [
-            remove_ansi(e[1].get()) if e[1].type is str else str(e[1].get())
-            for e in self.result
-        ]
+        return [remove_ansi(str(e[1].get())) for e in self.result]
 
     def get_result_string(self) -> str:
         """获取命令的输出结果字符串，将多行输出合并，去除ansi转义"""
@@ -102,10 +103,7 @@ class CmdRecord(Generic[T]):
 
     def get_result_iter(self) -> Iterator[str]:
         """获取命令的输出结果迭代器，去除ansi转义"""
-        return (
-            remove_ansi(e[1].get()) if e[1].type is str else str(e[1].get())
-            for e in self.result
-        )
+        return (remove_ansi(str(e[1].get())) for e in self.result)
 
     def search(self, re_string: str) -> re.Match[str] | None:
         """搜索命令的输出结果，匹配立即返回re.Match对象，未匹配返回None"""

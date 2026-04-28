@@ -217,3 +217,10 @@ def test_Channel_get_pid(ssh: SSH):
     ch = ssh.create_channel()
     pid = ch._get_channel_pid()
     assert pid == ch.pid
+
+
+def test_h618(ssh: SSH):
+    log("test_h618")
+    ch = ssh.create_channel()
+    for _ in range(10):
+        ch.run("pwd")

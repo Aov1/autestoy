@@ -3,12 +3,12 @@ from autestoy.tools.ansi import (
     AnsiColor,
     AnsiReset,
     remove_ansi,
-    remove_ansi_bytes,
+    # remove_ansi_bytes,
 )
 
 
 def test_remove_ansi_bytes():
-    res = remove_ansi_bytes(b"\x1b[?2004h\x1b[0;32m~\x1b[0m \x1b[0;97m$\x1b[0m ")
+    res = remove_ansi(b"\x1b[?2004h\x1b[0;32m~\x1b[0m \x1b[0;97m$\x1b[0m ")
     assert res == b"~ $ "
 
 

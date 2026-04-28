@@ -2,6 +2,8 @@
 生成obsidian格式的导出文件相关工具（markdown + mermaid）
 """
 
+from __future__ import annotations
+
 import inspect
 import os
 
@@ -17,7 +19,7 @@ from .collect import CollectObj
 from .term import Term
 
 
-class ObsidianExporter:
+class MarkdownExporter:
     def __init__(self, output_path: str | None = None) -> None:
         self.output_path = (
             output_path if output_path else os.path.abspath(inspect.stack()[1].filename)
@@ -54,3 +56,8 @@ class ObsidianExporter:
                 for e in cmd.result:
                     f.write(f"[{e[0] - Term.time_base:.3f}] {str(e[1].get())}\n")
             f.write("```")
+
+
+class ObsidianExporter(MarkdownExporter):
+    def __init__(self, output_path: str | None = None) -> None:
+        super().__init__(output_path)

@@ -1,20 +1,42 @@
 """一些对于终端ANSI转义序列的处理工具"""
 
+from __future__ import annotations
+
 import re
 from enum import StrEnum
+from typing import TypeVar, overload
 
 ANSI_ESCAPE_B = re.compile(rb"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 
-def remove_ansi_bytes(text):
-    global ANSI_ESCAPE_B
-    return ANSI_ESCAPE_B.sub(b"", text)
+@overload
+def remove_ansi(text: bytes) -> bytes: ...
 
 
-def remove_ansi(text):
-    global ANSI_ESCAPE
-    return ANSI_ESCAPE.sub("", text)
+@overload
+def remove_ansi(text: str) -> str: ...
+
+
+# T = TypeVar("T")
+
+
+# @overload
+# def remove_ansi(text: T) -> str: ...
+
+
+# def remove_ansi_bytes(text: bytes):
+#     global ANSI_ESCAPE_B
+#     return ANSI_ESCAPE_B.sub(b"", text)
+
+
+def remove_ansi(text: str | bytes) -> str | bytes:
+    if isinstance(text, bytes):
+        global ANSI_ESCAPE_B
+        return ANSI_ESCAPE_B.sub(b"", text)
+    else:
+        global ANSI_ESCAPE
+        return ANSI_ESCAPE.sub("", text)
 
 
 AnsiReset = "\033[0m"

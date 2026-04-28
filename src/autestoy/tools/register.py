@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import weakref
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from typing import Optional, Type, TypeVar
 
 from .datatype import Addr32, Addr64, Bits
@@ -39,7 +39,7 @@ class Field(HasParent):
 
     bit_range: tuple[int, int]
     default: Bits = Bits(None)
-    select: dict[Bits, str] = {}
+    select: dict[Bits, str] = field(default_factory=dict)
     R: Optional[bool] = None
     W: Optional[bool] = None
     info: str = ""

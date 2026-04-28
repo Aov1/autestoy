@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 tmp_ai_file/
+tools_file/
 *.egg-info
 
 # Virtual environments

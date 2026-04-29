@@ -20,6 +20,17 @@ from .ansi import AnsiReset, remove_ansi
 # T = TypeVar("T")
 
 
+"""
+Cmd prompt example:
+[timestamp] [id][source ][name ][exp?][    promp t  ][cmd]
+[    0.000] [21][Channel][DUT_1][sudo]user@host: ~$ echo "Hello World"
+
+Cmd output line example:
+[timestamp] [id?][output info]
+[    0.002] [21]Hello World
+"""
+
+
 class CmdRecord(Generic[T]):
     """命令记录类，用于记录命令的执行结果，规范不同协议发送输出的内容"""
 
@@ -33,11 +44,15 @@ class CmdRecord(Generic[T]):
 
     def __init__(self, cmd: str, prompt: str, create_id: bool = True) -> None:
         """初始化，为了减少运行时间的误差，请在发送命令前紧接该初始化"""
-        self.id: int = CmdRecord.id_generator() if create_id else 0
-        self.prompt: str = prompt
+        # timestamp
         self.start_time: Timestamp = Timestamp()
         self.end_time: Timestamp | None = None
         self.run_time: float | None = None
+        # info
+        self.id: int = CmdRecord.id_generator() if create_id else 0
+        self.prompt: str = prompt
+        self.source: str = ""
+        self.name: str = ""
         self.cmd: str = cmd
         self.result: list[tuple[Timestamp, Result[T]]] = []
         self.stdin: pk_ChannelStdinFile | None = None

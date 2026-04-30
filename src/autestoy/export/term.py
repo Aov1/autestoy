@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import shutil
 import sys
+from typing import Optional
 
 # from autestoy.tools.record import CmdRecord
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
+from ..tools.globalvar import get_global_time_base_or_init
 from ..tools.result import Result
 from ..tools.timestamp import Timestamp
+from .messageio import Message, MessageBus, MessageSource, MessageType
 
 sys_write = sys.stdout.write
 
@@ -123,3 +126,41 @@ class Term:
             cls.terminal_size = tmp_new_size
             return True
         return False
+
+
+class MessageTerminal:
+    """消息终端，用于输出消息到终端"""
+
+    def __init__(self, absoulute_timestamp: bool = False):
+        self.timebase = get_global_time_base_or_init()
+        self.timestamp = Timestamp()
+        self.absoulute_timestamp = absoulute_timestamp
+
+        MessageBus.subscribe(MessageType.CMD_PROMPT, self._event_cmd_prompt)
+
+    def _ts(
+        self,
+        ovrd_timestamp: Optional[Timestamp] = None,
+    ) -> Timestamp:
+        """返回时间戳，如果提供了ovrd则返回ovrd，否则返回当前时间戳"""
+        if ovrd_timestamp is not None:
+            return ovrd_timestamp
+        return Timestamp()
+
+    def _fmt_ts(
+        self,
+        ts: Optional[Timestamp] = None,
+    ) -> str:
+        if ts is None:
+            ts = self._ts()
+
+        if self.absoulute_timestamp:
+            return f"[{str(ts)}]"
+        else:
+            return f"[{ts.to_float() - self.timebase:>{TermStyle.relative_timestamp_width}.{TermStyle.relative_timestamp_bits}f}]"
+
+    def _event_cmd_prompt(self, msg: Message):  # NOT FINISH，修改CmdRecord?
+        ts = self._fmt_ts(msg.timestamp)
+        id = msg.data.get("id", None)
+        prompt = msg.data.get("prompt", "")
+        sys.stdout.write(f"{ts} [{id}][][{prompt}]\n")

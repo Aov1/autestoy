@@ -188,7 +188,8 @@ __all__ = [
 # 运行时状态
 # ══════════════════════════════════════════════
 
-GlobalTimeBase: Timestamp | None = None
+from .tools.globalvar import GLOBAL_has_init, GLOBAL_timebase
+
 """
 全局时基。
 
@@ -213,15 +214,16 @@ def init() -> Timestamp:
         >>> att.init()
         [INFO] Script start at [2026-01-01 12:00:00.000]
     """
-    global GlobalTimeBase
-    GlobalTimeBase = Timestamp()
-
+    global GLOBAL_timebase
+    GLOBAL_timebase = Timestamp()
+    global GLOBAL_has_init
+    GLOBAL_has_init = True
     # 终端相对时间基线
-    Term.set_time_base(GlobalTimeBase)
-    Term.putsln(
-        f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}"
-        f"[INFO] Script start at [{GlobalTimeBase}]"
-        f"{AnsiReset}"
-    )
+    # Term.set_time_base(GlobalTimeBase)
+    # Term.putsln(
+    #     f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}"
+    #     f"[INFO] Script start at [{GlobalTimeBase}]"
+    #     f"{AnsiReset}"
+    # )
 
-    return GlobalTimeBase
+    return GLOBAL_timebase

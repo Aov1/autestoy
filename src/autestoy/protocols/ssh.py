@@ -202,6 +202,7 @@ class SSH:
     def create_channel(
         self,
         name: str | None = None,
+        copy_path: bool = False,
         prompt_pattern: str | None = None,
         show_welcome_info: bool = False,
         insert_cmd: str | None = None,
@@ -216,6 +217,8 @@ class SSH:
             insert_cmd=insert_cmd,
         )
         self.channels.append(tmp)
+        if copy_path and self.global_path is not None:
+            tmp.run(f"cd {self.global_path}")
         return tmp
 
     def set_global_path(self, path: str) -> None:
@@ -582,6 +585,20 @@ class Channel:
         )
         self.pid = self._get_channel_pid()
         self._resize_pty()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    def close(self):
+        """关闭通道"""
+        self.shell.close()
+        self.meta_record.logs.append(
+            Term.putsln(f"{self.meta_record.get_fmt_prompt()} Closed")
+        )
 
     def set_name(self, name: str):
         """设置通道名称"""

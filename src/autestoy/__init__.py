@@ -235,4 +235,8 @@ def init() -> Timestamp:
 
 
 # auto init
-init()
+# init()
+
+# 保证正常运行
+GLOBAL_timebase.update_timestamp()
+Term.set_time_base(GLOBAL_timebase)

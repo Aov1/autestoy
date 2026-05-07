@@ -76,6 +76,11 @@ from .tools.control import TrySeconds, get_line_from_head, ulog
 from .tools.datatype import Addr32, Addr64, Bits, BitView, Packet
 
 # ──────────────────────────────────────────────
+# 工具 - 全局
+# ──────────────────────────────────────────────
+from .tools.globalvar import GLOBAL_has_init, GLOBAL_timebase
+
+# ──────────────────────────────────────────────
 # 工具 - GUI（占位）
 # ──────────────────────────────────────────────
 from .tools.gui import Gui
@@ -181,14 +186,14 @@ __all__ = [
     "Gui",
     # ── 运行时 ──
     "init",
-    "GlobalTimeBase",
+    "GLOBAL_timebase",
+    "GLOBAL_has_init",
 ]
 
 # ══════════════════════════════════════════════
 # 运行时状态
 # ══════════════════════════════════════════════
 
-from .tools.globalvar import GLOBAL_has_init, GLOBAL_timebase
 
 """
 全局时基。
@@ -219,11 +224,15 @@ def init() -> Timestamp:
     global GLOBAL_has_init
     GLOBAL_has_init = True
     # 终端相对时间基线
-    # Term.set_time_base(GlobalTimeBase)
-    # Term.putsln(
-    #     f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}"
-    #     f"[INFO] Script start at [{GlobalTimeBase}]"
-    #     f"{AnsiReset}"
-    # )
+    Term.set_time_base(GLOBAL_timebase)
+    Term.putsln(
+        f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}"
+        f"[INFO] Script start at [{GLOBAL_timebase}]"
+        f"{AnsiReset}"
+    )
 
     return GLOBAL_timebase
+
+
+# auto init
+init()

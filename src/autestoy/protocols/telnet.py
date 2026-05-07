@@ -63,10 +63,10 @@ class Telnet:
     def send(self, data: str) -> None:
         self.tel3.write(data)
 
-    def recv_no_block(self) -> str:
+    def recv_no_block(self, timeout: float = 0.01) -> str:
         """接收telnet输出，非阻塞，无内容返回空字符"""
         try:
-            res = self.tel3.read_some(0.01)
+            res = self.tel3.read_some(timeout=timeout)
         except TimeoutError:
             return ""
         return res.decode() if isinstance(res, bytes) else res
@@ -94,7 +94,23 @@ class TelnetShell(Telnet):
         # 是否登陆
         if self.user is not None or self.password is not None:
             self.prompt = self._login(self.user, self.password)
+        else:
+            # MARK BUG: 不登陆无法获取prompt
+            # self.prompt = None
+            self._get_prompt()
         self.cmds: list[CmdRecord] = []
+
+    def _get_prompt(self) -> str:
+        # not test
+        self.recv_no_block(0.05)
+        self.send("\n")
+
+        while (res := self.recv_no_block()) == "":
+            pass
+        if pmt := self.prompt_pattern.search(res):
+            return pmt.group()
+
+        raise RuntimeError("Prompt not found")
 
     def _login(
         self, user: str | None = None, password: str | None = None

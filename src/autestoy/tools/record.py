@@ -242,25 +242,25 @@ class CmdRecording(CmdRecord, Generic[T]):
             lines.append(line)
         return lines
 
-    def search_next_line(
+    def fifo_search_once(
         self, pattern: str, flags: re._FlagsType = 0
     ) -> None | tuple[str, re.Match[str] | None]:
         """匹配一次fifo中的数据，消耗fifo\n
         当fifo为空时返回None\n
-        fifo非空时进行正则匹配，返回 输出行 和 匹配结果\n
+        fifo非空时进行正则匹配，返回 (输出行, 匹配结果)\n
         匹配结果也可能为空"""
         line = self.get_once()
         if line is None:
             return None
         return line, re.search(pattern, line, flags)
 
-    def find_next_line(
+    def fifo_find_once(
         self, pattern: str, flags: re._FlagsType = 0
     ) -> None | tuple[str, list[str | None]]:
         """查找一次fifo中的数据，消耗fifo\n
         当fifo为空时返回None\n
-        fifo非空时进行正则匹配，返回 输出行 和 匹配结果列表\n
-        匹配失败时返回的是 输出行 和 空列pattern表"""
+        fifo非空时进行正则匹配，返回 (输出行 , 匹配结果列表)\n
+        匹配失败时返回的是 (输出行 , [] )"""
         line = self.get_once()
         if line is None:
             return None

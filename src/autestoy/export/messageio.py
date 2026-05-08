@@ -7,21 +7,51 @@ from __future__ import annotations
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import StrEnum, auto
-from typing import Callable
+from enum import Enum, StrEnum, auto
+from typing import Callable, Union
 
 from ..tools.timestamp import Timestamp
 
 
-class MessageType(StrEnum):
+@dataclass(frozen=True)
+class CMD_PROMPT:
+    id: int
+    name: str
+    prompt: str
+    command: str
+
+
+@dataclass(frozen=True)
+class CMD_OUTPUT:
+    id: int | None
+    output: str
+
+
+@dataclass(frozen=True)
+class LOG:
+    log: str
+
+
+@dataclass(frozen=True)
+class WARNING:
+    log: str
+
+
+@dataclass(frozen=True)
+class ERROR:
+    log: str
+
+
+class MessageType(Enum):
     CMD_PROMPT = auto()
     CMD_OUTPUT = auto()
-    CMD_ERROR = auto()
-    CMD_END = auto()
+    # CMD_ERROR = auto()
+    # CMD_END = auto()
     CONNECT = auto()
     DISCONNECT = auto()
-    USER_LOG = auto()
     LOG = auto()
+    WARNING = auto()
+    ERROR = auto()
 
 
 class MessageSource(StrEnum):
@@ -39,7 +69,8 @@ class Message:
     type: MessageType
     source: MessageSource
     timestamp: Timestamp
-    data: dict = field(default_factory=dict)
+    data: Union[LOG, WARNING, ERROR, CMD_OUTPUT, CMD_PROMPT]
+    # data: dict = field(default_factory=dict)
 
 
 class MessageBus:

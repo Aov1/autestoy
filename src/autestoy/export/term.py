@@ -13,7 +13,7 @@ from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.globalvar import get_global_time_base_or_init
 from ..tools.result import Result
 from ..tools.timestamp import Timestamp
-from .messageio import Message, MessageBus, MessageSource, MessageType
+from .messageio import LOG, Message, MessageBus, MessageSource, MessageType
 
 sys_write = sys.stdout.write
 
@@ -137,6 +137,8 @@ class MessageTerminal:
         self.absoulute_timestamp = absoulute_timestamp
 
         MessageBus.subscribe(MessageType.CMD_PROMPT, self._event_cmd_prompt)
+        MessageBus.subscribe(MessageType.CMD_OUTPUT, self._event_cmd_output)
+        MessageBus.subscribe(MessageType.LOG, self._event_log)
 
     def _ts(
         self,
@@ -164,3 +166,16 @@ class MessageTerminal:
         id = msg.data.get("id", None)
         prompt = msg.data.get("prompt", "")
         sys.stdout.write(f"{ts} [{id}][][{prompt}]\n")
+
+    def _event_cmd_output(self, msg: Message):
+        ts = self._fmt_ts(msg.timestamp)
+        id = msg.data.get("id", None)
+        output = msg.data.get("output", "")
+        sys.stdout.write(f"{ts} [{id}]{output}\n")
+
+    def _event_log(self, msg: Message):
+        ts = self._fmt_ts(msg.timestamp)
+        msg.data: LOG
+        output = msg.data.log
+        source = msg.source
+        sys.stdout.write(f"{ts} [{source.name.upper()}Log] {output}\n")

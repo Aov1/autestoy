@@ -25,6 +25,7 @@ from paramiko.sftp_file import SFTPFile
 
 # 相对调用
 from ..export.collect import CollectObj, CollectType, collect
+from ..export.messageio import CMD_OUTPUT, CMD_PROMPT, Message, MessageBus, MessageType
 from ..export.term import Term
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.record import CmdRecord, CmdRecording, MetaRecord
@@ -55,20 +56,20 @@ class RemoteConfig:
         name: 远程主机显示名称，默认为 "user@ip"
     """
 
-    def __init__(self, user: str, ip: str, password: str, port: int = 22) -> None:
+    def __init__(self, user: str, host: str, password: str, port: int = 22) -> None:
         """初始化远程配置。
 
         Args:
             user: 登录用户名
-            ip: 主机IP地址
+            host: 主机IP地址
             password: 登录密码
             port: SSH端口号，默认为22
         """
         self.user = user
-        self.ip = ip
+        self.host = host
         self.password = password
         self.port = port
-        self.name = f"{user}@{ip}"
+        self.name = f"{user}@{host}"
 
     def set_name(self, name: str) -> Self:
         """设置远程主机的显示名称。
@@ -104,7 +105,7 @@ class SSH:
         self.meta_record = MetaRecord(
             type="SSH",
             name=self.name,
-            info=f"{self.remote_config.user}@{self.remote_config.ip}",
+            info=f"{self.remote_config.user}@{self.remote_config.host}",
         )
         self.remote = pk.SSHClient()
         self.remote.set_missing_host_key_policy(pk.AutoAddPolicy())
@@ -125,7 +126,7 @@ class SSH:
         except Exception as _:
             if raise_when_timeout:
                 raise TimeoutError(
-                    f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.ip}] TimeOut!"
+                    f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.host}] TimeOut!"
                 )
             else:
                 warnings.warn(
@@ -192,7 +193,7 @@ class SSH:
     def _connect(self):
         """连接到远程主机"""
         self.remote.connect(
-            hostname=self.remote_config.ip,
+            hostname=self.remote_config.host,
             username=self.remote_config.user,
             password=self.remote_config.password,
             port=self.remote_config.port,

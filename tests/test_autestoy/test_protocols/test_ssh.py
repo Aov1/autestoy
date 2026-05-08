@@ -15,7 +15,7 @@ def test_RemoteConfig():
     """测试RemoteConfig基础配置 与 方法"""
     host = RemoteConfig("test", "127.0.0.1", "password")
     assert host.user == "test"
-    assert host.ip == "127.0.0.1"
+    assert host.host == "127.0.0.1"
     assert host.password == "password"
     assert host.port == 22
     assert host.name == "test@127.0.0.1"

@@ -14,9 +14,9 @@ def remote() -> RemoteConfig:
     return RemoteConfig(
         user="kickpi",
         # user="u0_a210",
-        ip="192.168.4.191",
-        # ip="192.168.18.6",
-        # ip="192.168.4.32",
+        host="192.168.4.191",
+        # host="192.168.18.6",
+        # host="192.168.4.32",
         password="kickpi",
         # password="0402",
         # port=8022,

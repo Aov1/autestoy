@@ -6,14 +6,31 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 # from autestoy.tools.record import CmdRecord
-from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
-from ..tools.globalvar import get_global_time_base_or_init
+from ..tools.ansi import (
+    AnsiBackground,
+    AnsiColor,
+    AnsiReset,
+    AnsiStyle,
+    ansi,
+    make_ansi,
+    remove_ansi,
+)
+from ..tools.globalvar import GLOBAL_timebase
 from ..tools.result import Result
 from ..tools.timestamp import Timestamp
-from .messageio import LOG, Message, MessageBus, MessageSource, MessageType
+from .messageio import (
+    Message,
+    MessageBus,
+    MessageSource,
+    MessageType,
+    data_CMD_OUTPUT,
+    data_CMD_PROMPT,
+    data_LOG,
+)
 
 sys_write = sys.stdout.write
 
@@ -128,14 +145,38 @@ class Term:
         return False
 
 
+# ===============MessageIO============
+
+
+def rt_ts_res_msg(msg: str) -> tuple[Timestamp, Result[str]]:
+    return Timestamp(), Result(msg)
+
+
+@dataclass
+class MessageStyle:
+    timestamp_ansi: str = AnsiColor.blue
+    command_header_ansi: str = AnsiColor.light_green
+    message_ansi: str = AnsiColor.none
+    log_ansi: str = AnsiColor.yellow
+    warning_ansi: str = AnsiStyle.bold + AnsiColor.yellow
+    error_ansi: str = AnsiStyle.bold + AnsiColor.red
+    user_dbg_ansi: str = AnsiColor.yellow
+
+
 class MessageTerminal:
     """消息终端，用于输出消息到终端"""
 
-    def __init__(self, absoulute_timestamp: bool = False):
-        self.timebase = get_global_time_base_or_init()
+    def __init__(
+        self,
+        writable: Callable[[str], Any] = sys.stdout.write,
+        style: MessageStyle = MessageStyle(),
+        absoulute_timestamp: bool = False,
+    ):
+        self.timebase = GLOBAL_timebase
         self.timestamp = Timestamp()
         self.absoulute_timestamp = absoulute_timestamp
-
+        self.write = writable
+        self.style = style
         MessageBus.subscribe(MessageType.CMD_PROMPT, self._event_cmd_prompt)
         MessageBus.subscribe(MessageType.CMD_OUTPUT, self._event_cmd_output)
         MessageBus.subscribe(MessageType.LOG, self._event_log)
@@ -157,25 +198,57 @@ class MessageTerminal:
             ts = self._ts()
 
         if self.absoulute_timestamp:
-            return f"[{str(ts)}]"
+            return str(ts)
         else:
-            return f"[{ts.to_float() - self.timebase:>{TermStyle.relative_timestamp_width}.{TermStyle.relative_timestamp_bits}f}]"
+            return f"{ts.to_float() - self.timebase:>{TermStyle.relative_timestamp_width}.{TermStyle.relative_timestamp_bits}f}"
 
-    def _event_cmd_prompt(self, msg: Message):  # NOT FINISH，修改CmdRecord?
+    def _event_cmd_prompt(self, msg: Message[data_CMD_PROMPT]):
         ts = self._fmt_ts(msg.timestamp)
-        id = msg.data.get("id", None)
-        prompt = msg.data.get("prompt", "")
-        sys.stdout.write(f"{ts} [{id}][][{prompt}]\n")
+        id = msg.data.id
+        name = msg.data.name
+        command = msg.data.command
+        prompt = msg.data.prompt
+        source = msg.source.name
+        string = make_ansi(
+            (f"[{ts}]", self.style.timestamp_ansi, AnsiReset),
+            " ",
+            (
+                f"[{id}][{source}][{name}]{prompt}",
+                self.style.command_header_ansi,
+                AnsiReset,
+            ),
+            " ",
+            (command, self.style.message_ansi, AnsiReset),
+        )
+        self.write(string + "\n")
+        # self.write(f"[{ts}] [{id}][{source}][{name}]{prompt} {command}\n")
 
-    def _event_cmd_output(self, msg: Message):
+    def _event_cmd_output(self, msg: Message[data_CMD_OUTPUT]):
         ts = self._fmt_ts(msg.timestamp)
-        id = msg.data.get("id", None)
-        output = msg.data.get("output", "")
-        sys.stdout.write(f"{ts} [{id}]{output}\n")
+        id = msg.data.id
+        output = msg.data.output
+        string = make_ansi(
+            (f"[{ts}]", self.style.timestamp_ansi, AnsiReset),
+            " ",
+            (f"{[id]}", self.style.command_header_ansi, AnsiReset),
+            (output, self.style.message_ansi, AnsiReset),
+        )
+        self.write(string + "\n")
+        # self.write(f"[{ts}] [{id}]{output}\n")
 
-    def _event_log(self, msg: Message):
+    def _event_log(self, msg: Message[data_LOG]):
         ts = self._fmt_ts(msg.timestamp)
-        msg.data: LOG
         output = msg.data.log
-        source = msg.source
-        sys.stdout.write(f"{ts} [{source.name.upper()}Log] {output}\n")
+        source = msg.source.name
+        type = msg.type.name
+        name = msg.data.name
+        string = make_ansi(
+            (f"[{ts}]", self.style.timestamp_ansi, AnsiReset),
+            " ",
+            (f"[{type}][{source}][{name}]", self.style.log_ansi, AnsiReset),
+            " ",
+            (output, self.style.message_ansi, AnsiReset),
+        )
+        self.write(string + "\n")
+
+        # self.write(f"[{ts}] [{source}Log]{output}\n")

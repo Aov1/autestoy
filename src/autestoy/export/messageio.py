@@ -14,7 +14,7 @@ from ..tools.timestamp import Timestamp
 
 
 @dataclass(frozen=True)
-class CMD_PROMPT:
+class data_CMD_PROMPT:
     id: int
     name: str
     prompt: str
@@ -22,23 +22,26 @@ class CMD_PROMPT:
 
 
 @dataclass(frozen=True)
-class CMD_OUTPUT:
+class data_CMD_OUTPUT:
     id: int | None
     output: str
 
 
 @dataclass(frozen=True)
-class LOG:
+class data_LOG:
+    name: str
     log: str
 
 
 @dataclass(frozen=True)
-class WARNING:
+class data_WARNING:
+    name: str
     log: str
 
 
 @dataclass(frozen=True)
-class ERROR:
+class data_ERROR:
+    name: str
     log: str
 
 
@@ -65,11 +68,12 @@ class MessageSource(StrEnum):
 
 
 @dataclass
-class Message:
+class Message[T]:
     type: MessageType
     source: MessageSource
     timestamp: Timestamp
-    data: Union[LOG, WARNING, ERROR, CMD_OUTPUT, CMD_PROMPT]
+    data: T
+    # data: Union[LOG, WARNING, ERROR, CMD_OUTPUT, CMD_PROMPT]
     # data: dict = field(default_factory=dict)
 
 

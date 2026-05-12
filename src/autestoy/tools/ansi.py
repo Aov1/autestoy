@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import TypeVar, overload
+from typing import Optional, TypeVar, overload
 
 ANSI_ESCAPE_B = re.compile(rb"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -117,3 +117,17 @@ def AnsiBackgroundTrueColor(r: int, g: int, b: int) -> str:
     g = max(0, min(255, g))
     b = max(0, min(255, b))
     return f"\033[48;2;{r};{g};{b}m"
+
+
+def ansi(string: str, before: str | None = None, after: str | None = None) -> str:
+    """注入ansi样式"""
+    return f"{before if before is not None else ''}{string}{after if after is not None else ''}"
+
+
+def make_ansi(*node: tuple[str, str | None, str | None] | str) -> str:
+    """多个ansi进行拼接"""
+    node = tuple(n if isinstance(n, tuple) else (n, None, None) for n in node)
+    return "".join(ansi(*n) for n in node)
+
+
+# make_ansi("", (" ", " ", " "))

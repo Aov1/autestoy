@@ -25,11 +25,20 @@ from paramiko.sftp_file import SFTPFile
 
 # 相对调用
 from ..export.collect import CollectObj, CollectType, collect
-from ..export.messageio import CMD_OUTPUT, CMD_PROMPT, Message, MessageBus, MessageType
-from ..export.term import Term
+from ..export.messageio import (
+    Message,
+    MessageBus,
+    MessageSource,
+    MessageType,
+    data_CMD_OUTPUT,
+    data_CMD_PROMPT,
+    data_LOG,
+)
+from ..export.term import Term, rt_ts_res_msg
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
 from ..tools.record import CmdRecord, CmdRecording, MetaRecord
 from ..tools.result import Result
+from ..tools.timestamp import Timestamp
 
 # import asyncssh as assh
 # from ..tools.timestamp import Timestamp
@@ -134,8 +143,15 @@ class SSH:
                 )
         # check connect
         if self.is_connected():
-            self.meta_record.logs.append(
-                Term.putsln(f"{self.meta_record.get_fmt_prompt()} Connected")
+            _ts, _log = rt_ts_res_msg("Connected")
+            self.meta_record.logs.append((_ts, _log))
+            MessageBus.publish(
+                Message[data_LOG](
+                    type=MessageType.LOG,
+                    source=MessageSource.SSH_CHANNEL,
+                    timestamp=_ts,
+                    data=data_LOG(name=self.name, log=_log.get()),
+                )
             )
             self.start_time = self.meta_record.start_time
             _, stdout, _ = self.remote.exec_command("pwd")
@@ -249,15 +265,42 @@ class SSH:
         head_path_info, _ = self._path_process("")
         record = CmdRecord[str](
             f"cd {path}",
-            f"[{self.name}]{head_path_info} $",
+            f"{head_path_info} $",
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        MessageBus.publish(
+            Message[data_CMD_PROMPT](
+                type=MessageType.CMD_PROMPT,
+                source=MessageSource.SSH,
+                timestamp=record.start_time,
+                data=data_CMD_PROMPT(
+                    id=record.id,
+                    name=self.name,
+                    prompt=record.prompt,
+                    command=record.cmd,
+                ),
+            )
+        )
+        # Term.putsln(record.get_fmt_prompt())
         record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
 
         while True:
             if res := stderr.readline().strip():
-                record.result.append(Term.putsln(res))
+                # record.result.append(Term.putsln(res))
+                _rt, _res = rt_ts_res_msg(res)
+                record.result.append((_rt, _res))
+                MessageBus.publish(
+                    Message[data_CMD_OUTPUT](
+                        type=MessageType.CMD_OUTPUT,
+                        source=MessageSource.SSH,
+                        timestamp=_rt,
+                        data=data_CMD_OUTPUT(
+                            id=record.id,
+                            output=res,
+                        ),
+                    )
+                )
+
                 break
             if res := stdout.readline():
                 self.global_path = res.strip()
@@ -287,13 +330,42 @@ class SSH:
         while not record.stdout.channel.exit_status_ready():
             line = record.stdout.readline()
             if line.strip() != "":
-                record.result.append(Term.putsln(line.rstrip()))
+                # record.result.append(Term.putsln(line.rstrip()))
+                res = line.strip()
+                _rt, _res = rt_ts_res_msg(res)
+                record.result.append((_rt, _res))
+                MessageBus.publish(
+                    Message[data_CMD_OUTPUT](
+                        type=MessageType.CMD_OUTPUT,
+                        source=MessageSource.SSH,
+                        timestamp=_rt,
+                        data=data_CMD_OUTPUT(
+                            id=record.id,
+                            output=res,
+                        ),
+                    )
+                )
+
             time.sleep(0.01)
         else:
             while True:
                 line = record.stdout.readline()
                 if line.strip() != "":
-                    record.result.append(Term.putsln(line.rstrip()))
+                    # record.result.append(Term.putsln(line.rstrip()))
+                    res = line.strip()
+                    _rt, _res = rt_ts_res_msg(res)
+                    record.result.append((_rt, _res))
+                    MessageBus.publish(
+                        Message[data_CMD_OUTPUT](
+                            type=MessageType.CMD_OUTPUT,
+                            source=MessageSource.SSH,
+                            timestamp=_rt,
+                            data=data_CMD_OUTPUT(
+                                id=record.id,
+                                output=res,
+                            ),
+                        )
+                    )
                 else:
                     break
             record.exit_code = record.stdout.channel.recv_exit_status()
@@ -326,12 +398,25 @@ class SSH:
 
         record = CmdRecord[str](
             cmd,
-            f"[{self.name}][sudo]{head_path_info} $"
+            f"{head_path_info} $ sudo"
             if sudo and password is not None
-            else f"[{self.name}]{head_path_info} $",
+            else f"{head_path_info} $",
         )
         self.cmds.append(record)
-        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+        record.start_time, _ = rt_ts_res_msg("")
+        MessageBus.publish(
+            Message[data_CMD_PROMPT](
+                type=MessageType.CMD_PROMPT,
+                source=MessageSource.SSH,
+                timestamp=record.start_time,
+                data=data_CMD_PROMPT(
+                    id=record.id,
+                    name=self.name,
+                    prompt=record.prompt,
+                    command=record.cmd,
+                ),
+            )
+        )
         record.stdin, record.stdout, record.stderr = self.remote.exec_command(
             processed_cmd, get_pty=True
         )
@@ -576,7 +661,7 @@ class Channel:
                 tmp_f_switched_bash = True
                 # print()
 
-        prompt = tmp.group().replace("\r", "")
+        prompt = tmp.group().replace("\r", "").strip()
 
         self.f_get_prompt = True if self.prompt_complie.search(prompt) else False
         self.prompt_now = prompt
@@ -678,13 +763,38 @@ class Channel:
         #     if e.strip() != "" and not e.strip().startswith("#")
         # ]
 
-        record = CmdRecord[str](cmd, f"[{self.name}]{self.prompt_now}")
+        record = CmdRecord[str](cmd, f"{self.prompt_now}")
         self.cmds.append(record)
-        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+        record.start_time = Timestamp()
+        MessageBus.publish(
+            Message[data_CMD_PROMPT](
+                type=MessageType.CMD_PROMPT,
+                source=MessageSource.SSH_CHANNEL,
+                timestamp=record.start_time,
+                data=data_CMD_PROMPT(
+                    id=record.id,
+                    name=self.name,
+                    prompt=record.prompt,
+                    command=record.cmd,
+                ),
+            )
+        )
 
         for each_line in self._run_line_generator(cmd):
-            timestamp, _ = Term.putsln(each_line)
-            record.result_append(each_line, timestamp)
+            # timestamp, _ = Term.putsln(each_line)
+            ts = Timestamp()
+            MessageBus.publish(
+                Message[data_CMD_OUTPUT](
+                    type=MessageType.CMD_OUTPUT,
+                    source=MessageSource.SSH_CHANNEL,
+                    timestamp=ts,
+                    data=data_CMD_OUTPUT(
+                        id=record.id,
+                        output=each_line,
+                    ),
+                )
+            )
+            record.result_append(each_line, ts)
 
         record.record_end()
         record.exit_code = self._get_exit_code()
@@ -760,8 +870,6 @@ class Channel:
                         for cmd in cmd_list
                         if not cmd.strip().startswith("#") and cmd.strip() != ""
                     ]
-                    # 去除空行
-                    # cmd_list = [cmd.strip() for cmd in cmd_list if cmd.strip() != ""]
                     # 递归调用run_lines
                     res.extend(self.run_lines(cmd_list))
                 else:  # 命令只有一行，统一列表返回格式

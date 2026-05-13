@@ -58,4 +58,4 @@ with (
 
 
 disp.join()
-print(f"Time cost 10000 msg: {ed - st}")
+print(f"Time cost 100000 msg: {ed - st}")

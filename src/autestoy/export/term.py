@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 # from autestoy.tools.record import CmdRecord
 from ..tools.ansi import (
     AnsiBackground,
+    AnsiBackgroundTrueColor,
     AnsiColor,
     AnsiReset,
     AnsiStyle,
@@ -155,13 +156,17 @@ def rt_ts_res_msg(msg: str) -> tuple[Timestamp, Result[str]]:
 
 @dataclass
 class MessageStyle:
-    timestamp_ansi: str = AnsiColor.blue
+    timestamp_ansi: str = AnsiColor.light_blue
     command_header_ansi: str = AnsiColor.light_green
-    message_ansi: str = AnsiColor.none
-    log_ansi: str = AnsiColor.yellow
-    warning_ansi: str = AnsiStyle.bold + AnsiColor.yellow
-    error_ansi: str = AnsiStyle.bold + AnsiColor.red
-    user_dbg_ansi: str = AnsiColor.yellow
+    message_ansi: str = AnsiColor.none + AnsiStyle.dark
+    log_header_ansi: str = AnsiColor.yellow
+    log_message_ansi: str = AnsiColor.none
+    warning_header_ansi: str = AnsiStyle.bold + AnsiColor.yellow
+    warning_message_ansi: str = AnsiColor.none
+    error_header_ansi: str = AnsiStyle.bold + AnsiColor.red
+    error_message_ansi: str = AnsiColor.none
+    user_header_ansi: str = AnsiColor.yellow
+    user_message_ansi: str = AnsiColor.none
 
 
 class MessageTerminal(OutputLine):
@@ -261,9 +266,9 @@ class MessageTerminal(OutputLine):
         string = make_ansi(
             (f"[{ts}]", self.style.timestamp_ansi, AnsiReset),
             " ",
-            (f"[{type}][{source}][{name}]", self.style.log_ansi, AnsiReset),
+            (f"[{type}][{source}][{name}]", self.style.log_header_ansi, AnsiReset),
             " ",
-            (output, self.style.message_ansi, AnsiReset),
+            (output, self.style.log_message_ansi, AnsiReset),
         )
         self.write(string + "\n")
 

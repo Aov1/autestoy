@@ -90,11 +90,11 @@ class MessageBus:
     """消息总线"""
 
     # 消息类型到回调函数的映射，使用 defaultdict 避免 KeyError
-    _messages_callback_map: dict[MessageType, list[Callable[[Message], None]]] = (
-        defaultdict(list)
-    )
+    # _messages_callback_map: dict[MessageType, list[Callable[[Message], None]]] = (
+    #     defaultdict(list)
+    # )
     # 回调函数锁，用于线程安全
-    _messages_callback_lock: td.Lock = td.Lock()
+    # _messages_callback_lock: td.Lock = td.Lock()
     # 主进程消息队列
     _main_fifo: queue.Queue[Message] = queue.Queue()
 
@@ -103,36 +103,36 @@ class MessageBus:
     _consume_count: int = 0
     _stats_lock: td.Lock = td.Lock()
 
-    @classmethod
-    def subscribe(
-        cls, message_type: MessageType, callback: Callable[[Message], None]
-    ) -> Callable[[], None]:
-        """订阅指定类型的消息"""
-        with cls._messages_callback_lock:
-            cls._messages_callback_map[message_type].append(callback)
+    # @classmethod
+    # def subscribe(
+    #     cls, message_type: MessageType, callback: Callable[[Message], None]
+    # ) -> Callable[[], None]:
+    #     """订阅指定类型的消息"""
+    #     with cls._messages_callback_lock:
+    #         cls._messages_callback_map[message_type].append(callback)
 
-        def unsubscribe():
-            with cls._messages_callback_lock:
-                try:
-                    cls._messages_callback_map[message_type].remove(callback)
-                except ValueError:
-                    pass
+    #     def unsubscribe():
+    #         with cls._messages_callback_lock:
+    #             try:
+    #                 cls._messages_callback_map[message_type].remove(callback)
+    #             except ValueError:
+    #                 pass
 
-        return unsubscribe
+    #     return unsubscribe
 
-    @classmethod
-    def safe_get_subscribers(
-        cls, message_type: MessageType
-    ) -> list[Callable[[Message], None]]:
-        """获取指定类型的所有订阅者"""
-        with cls._messages_callback_lock:
-            return list(cls._messages_callback_map.get(message_type, []))
+    # @classmethod
+    # def safe_get_subscribers(
+    #     cls, message_type: MessageType
+    # ) -> list[Callable[[Message], None]]:
+    #     """获取指定类型的所有订阅者"""
+    #     with cls._messages_callback_lock:
+    #         return list(cls._messages_callback_map.get(message_type, []))
 
-    @classmethod
-    def has_subscribers(cls, message_type: MessageType) -> bool:
-        """检查是否有订阅者"""
-        with cls._messages_callback_lock:
-            return bool(cls._messages_callback_map.get(message_type, []))
+    # @classmethod
+    # def has_subscribers(cls, message_type: MessageType) -> bool:
+    #     """检查是否有订阅者"""
+    #     with cls._messages_callback_lock:
+    #         return bool(cls._messages_callback_map.get(message_type, []))
 
     @classmethod
     def publish(cls, message: Message):
@@ -205,14 +205,14 @@ class MessageBus:
             cls._publish_count = 0
             cls._consume_count = 0
 
-    @classmethod
-    def shutdown(cls) -> list[Message]:
-        messages = cls.get_fifo_until_empty()
+    # @classmethod
+    # def shutdown(cls) -> list[Message]:
+    #     messages = cls.get_fifo_until_empty()
 
-        with cls._messages_callback_lock:
-            cls._messages_callback_map.clear()
+    #     with cls._messages_callback_lock:
+    #         cls._messages_callback_map.clear()
 
-        return messages
+    #     return messages
 
 
 _DISP_ID = count(0)

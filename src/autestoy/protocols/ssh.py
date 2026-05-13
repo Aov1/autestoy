@@ -8,6 +8,7 @@ import threading as td
 import time
 import warnings
 from os import PathLike
+from sqlite3.dbapi2 import TimestampFromTicks
 from typing import (
     IO,
     Callable,
@@ -32,7 +33,11 @@ from ..export.messageio import (
     MessageType,
     data_CMD_OUTPUT,
     data_CMD_PROMPT,
+    data_CONNECT,
+    data_DISCONNECT,
+    data_ERROR,
     data_LOG,
+    data_WARNING,
 )
 from ..export.term import Term, rt_ts_res_msg
 from ..tools.ansi import AnsiColor, AnsiReset, remove_ansi
@@ -111,11 +116,11 @@ class SSH:
         # class create reocrd
         self.remote_config: RemoteConfig = remote_config
         self.name: str = self.remote_config.name
-        self.meta_record = MetaRecord(
-            type="SSH",
-            name=self.name,
-            info=f"{self.remote_config.user}@{self.remote_config.host}",
-        )
+        # self.meta_record = MetaRecord(
+        #     type="SSH",
+        #     name=self.name,
+        #     info=f"{self.remote_config.user}@{self.remote_config.host}",
+        # )
         self.remote = pk.SSHClient()
         self.remote.set_missing_host_key_policy(pk.AutoAddPolicy())
         self.timeout: None | float = timeout
@@ -138,22 +143,36 @@ class SSH:
                     f"Connect [{self.name}][{self.remote_config.user}@{self.remote_config.host}] TimeOut!"
                 )
             else:
-                warnings.warn(
-                    f"Failed to connect to {self.remote_config.name}: TimeOut!"
+                MessageBus.publish(
+                    Message[data_ERROR](
+                        type=MessageType.ERROR,
+                        source=MessageSource.SSH_CHANNEL,
+                        timestamp=Timestamp(),
+                        data=data_ERROR(
+                            name=self.name,
+                            log=f"Failed to connect to {self.remote_config.name}: TimeOut!",
+                        ),
+                    )
                 )
         # check connect
         if self.is_connected():
-            _ts, _log = rt_ts_res_msg("Connected")
-            self.meta_record.logs.append((_ts, _log))
+            # _ts, _log = rt_ts_res_msg("Connected")
+            # self.meta_record.logs.append((_ts, _log))
+            ts = Timestamp()
             MessageBus.publish(
-                Message[data_LOG](
-                    type=MessageType.LOG,
-                    source=MessageSource.SSH_CHANNEL,
-                    timestamp=_ts,
-                    data=data_LOG(name=self.name, log=_log.get()),
+                Message[data_CONNECT](
+                    type=MessageType.CONNECT,
+                    source=MessageSource.SSH,
+                    timestamp=ts,
+                    data=data_CONNECT(
+                        name=self.name,
+                        id_key=f"{self.remote_config.user}@{self.remote_config.host}",
+                        info="Connected",
+                    ),
                 )
             )
-            self.start_time = self.meta_record.start_time
+            self.start_time = ts
+            # self.start_time = self.meta_record.start_time
             _, stdout, _ = self.remote.exec_command("pwd")
             self.base_path = stdout.read().decode().strip()
             # print(self.base_path)
@@ -163,22 +182,60 @@ class SSH:
         for ch in self.channels:
             if not ch.shell.closed:
                 ch.shell.close()
-                ch.meta_record.logs.append(
-                    Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
+                # _ts, _log = rt_ts_res_msg("Closed")
+                # self.meta_record.logs.append((_ts, _log))
+                MessageBus.publish(
+                    Message[data_DISCONNECT](
+                        type=MessageType.DISCONNECT,
+                        source=MessageSource.SSH_CHANNEL,
+                        timestamp=Timestamp(),
+                        data=data_DISCONNECT(
+                            name=self.name,
+                            id_key=f"{self.remote_config.user}@{self.remote_config.host}",
+                            info="Closed",
+                        ),
+                    )
                 )
+                # ch.meta_record.logs.append(
+                #     Term.putsln(f"{ch.meta_record.get_fmt_prompt()} Closed")
+                # )
 
     def close_sub_sftp(self):
         for sftp in self.sftp:
             if not sftp.sftp.sock.closed:
                 sftp.sftp.close()
-                Term.putsln(f"{sftp.meta_record.get_fmt_prompt()} Closed")
+                MessageBus.publish(
+                    Message[data_DISCONNECT](
+                        type=MessageType.DISCONNECT,
+                        source=MessageSource.SFTP,
+                        timestamp=Timestamp(),
+                        data=data_DISCONNECT(
+                            name=self.name,
+                            id_key=f"{self.remote_config.user}@{self.remote_config.host}",
+                            info="Closed",
+                        ),
+                    )
+                )
+                # Term.putsln(f"{sftp.meta_record.get_fmt_prompt()} Closed")
 
     def close_self(self):
         if self.is_connected():
             self.remote.close()
-            self.meta_record.logs.append(
-                Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
+            MessageBus.publish(
+                Message[data_DISCONNECT](
+                    type=MessageType.DISCONNECT,
+                    source=MessageSource.SSH,
+                    timestamp=Timestamp(),
+                    data=data_DISCONNECT(
+                        name=self.name,
+                        id_key=f"{self.remote_config.user}@{self.remote_config.host}",
+                        info="Disconnected",
+                    ),
+                )
             )
+            # self.meta_record.logs.append(
+            #     Term.putsln(f"{self.meta_record.get_fmt_prompt()} Disconnected")
+            # )
 
     def close_all(self):
         if self.is_connected():
@@ -479,12 +536,24 @@ class SSH:
             line = stdout.readline()
             if line != "":
                 line = line.rstrip()
-                record.result.append(
-                    Term.putsln(
-                        line,
-                        insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                record.result_append(line, ts := Timestamp())
+                MessageBus.publish(
+                    Message[data_CMD_OUTPUT](
+                        type=MessageType.CMD_OUTPUT,
+                        source=MessageSource.SSH,
+                        timestamp=ts,
+                        data=data_CMD_OUTPUT(
+                            id=record.id,
+                            output=line,
+                        ),
                     )
                 )
+                # record.result.append(
+                #     Term.putsln(
+                #         line,
+                #         insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                #     )
+                # )
                 record.fifo.put(line)
             time.sleep(0.005)
         else:
@@ -493,12 +562,24 @@ class SSH:
                 if line == "":
                     break
                 line = line.rstrip()
-                record.result.append(
-                    Term.putsln(
-                        line,
-                        insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                record.result_append(line, ts := Timestamp())
+                MessageBus.publish(
+                    Message[data_CMD_OUTPUT](
+                        type=MessageType.CMD_OUTPUT,
+                        source=MessageSource.SSH,
+                        timestamp=ts,
+                        data=data_CMD_OUTPUT(
+                            id=record.id,
+                            output=line,
+                        ),
                     )
                 )
+                # record.result.append(
+                #     Term.putsln(
+                #         line,
+                #         insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
+                #     )
+                # )
                 record.fifo.put(line)
             record.record_end()
             record.exit_code = stdout.channel.recv_exit_status()
@@ -515,7 +596,7 @@ class SSH:
         processed_cmd = "echo $$ && " + processed_cmd  # 获取远程服务器的进程pid
         record = CmdRecording[str](
             cmd,
-            f"[{self.name}]{head_path_info} $",
+            f"{head_path_info} $",
         )
 
         self.cmds.append(record)
@@ -523,7 +604,20 @@ class SSH:
         task.daemon = True
         record.long_running_task = task
         if start_task:
-            Term.putsln(record.get_fmt_prompt())
+            MessageBus.publish(
+                Message[data_CMD_PROMPT](
+                    type=MessageType.CMD_PROMPT,
+                    source=MessageSource.SSH,
+                    timestamp=record.start_time,
+                    data=data_CMD_PROMPT(
+                        id=record.id,
+                        name=record.name,
+                        prompt=record.prompt,
+                        command=record.cmd,
+                    ),
+                )
+            )
+            # Term.putsln(record.get_fmt_prompt())
             task.start()
 
         return record
@@ -619,10 +713,11 @@ class Channel:
         """初始化通道，需要指定SSH"""
         # create record
         self.name = name if name else "ch_" + str(Channel.id_generator())
-        self.meta_record = MetaRecord(
-            type="Channel", name=self.name, info=ssh.meta_record.info
-        )
+        # self.meta_record = MetaRecord(
+        #     type="Channel", name=self.name, info=ssh.meta_record.info
+        # )
         self.shell = ssh.remote.invoke_shell()
+        self.user_ip = ssh.remote_config.user + "@" + ssh.remote_config.host
         prompt_pattern = (
             Channel.prompt_pattern_default if prompt_pattern is None else prompt_pattern
         )
@@ -653,11 +748,22 @@ class Channel:
             time.sleep(0.01)
             if time.time() - tmp_timestamp > tmp_timeout and not tmp_f_switched_bash:
                 self.shell.send(bytes("bash\n", "utf-8"))
-                self.meta_record.logs.append(
-                    Term.puts_msg(
-                        f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                MessageBus.publish(
+                    Message[data_WARNING](
+                        type=MessageType.WARNING,
+                        source=MessageSource.SSH_CHANNEL,
+                        timestamp=Timestamp(),
+                        data=data_WARNING(
+                            name=self.name,
+                            log=f"prompt not found for {tmp_timeout}s, switching to bash",
+                        ),
                     )
                 )
+                # self.meta_record.logs.append(
+                #     Term.puts_msg(
+                #         f"{AnsiColor.yellow}[Warning]{AnsiReset}: prompt not found for {tmp_timeout}s, switching to bash\n"
+                #     )
+                # )
                 tmp_f_switched_bash = True
                 # print()
 
@@ -666,9 +772,21 @@ class Channel:
         self.f_get_prompt = True if self.prompt_complie.search(prompt) else False
         self.prompt_now = prompt
         # print(f"DBG:prompt_now = {prompt}")
-        self.meta_record.logs.append(
-            Term.putsln(f"{self.meta_record.get_fmt_prompt()} Created")
+        MessageBus.publish(
+            Message[data_CONNECT](
+                type=MessageType.CONNECT,
+                source=MessageSource.SSH_CHANNEL,
+                timestamp=Timestamp(),
+                data=data_CONNECT(
+                    name=self.name,
+                    id_key=self.user_ip,
+                    info="Created",
+                ),
+            )
         )
+        # self.meta_record.logs.append(
+        #     Term.putsln(f"{self.meta_record.get_fmt_prompt()} Created")
+        # )
         self.pid = self._get_channel_pid()
         self._resize_pty()
 
@@ -682,74 +800,86 @@ class Channel:
     def close(self):
         """关闭通道"""
         self.shell.close()
-        self.meta_record.logs.append(
-            Term.putsln(f"{self.meta_record.get_fmt_prompt()} Closed")
+        MessageBus.publish(
+            Message[data_DISCONNECT](
+                type=MessageType.DISCONNECT,
+                source=MessageSource.SSH_CHANNEL,
+                timestamp=Timestamp(),
+                data=data_DISCONNECT(
+                    name=self.name,
+                    id_key=self.user_ip,
+                    info="Closed",
+                ),
+            )
         )
+        # self.meta_record.logs.append(
+        #     Term.putsln(f"{self.meta_record.get_fmt_prompt()} Closed")
+        # )
 
     def set_name(self, name: str):
         """设置通道名称"""
         self.name = name
-        self.meta_record.name = name
+        # self.meta_record.name = name
 
-    def run_old(self, cmd: str) -> CmdRecord[str]:
-        """执行命令，使用正则匹配终端提示符判断是否结束"""
-        if self.shell.recv_ready():
-            self.shell.recv(65535)
-        buf = b""  # 处理缓冲区
-        cmd_lines = (
-            cmd.replace("\r\n", "\n").replace("\r", "").strip().split("\n")
-        )  # 对于多行命令的处理
-        f_cmd_lines_skip = False  # 是否处理完发送的命令
-        f_prompt_received = False  # 是否匹配终端提示符
-        # res = ""  # 有效输出
+    # def run_old(self, cmd: str) -> CmdRecord[str]:
+    #     """执行命令，使用正则匹配终端提示符判断是否结束"""
+    #     if self.shell.recv_ready():
+    #         self.shell.recv(65535)
+    #     buf = b""  # 处理缓冲区
+    #     cmd_lines = (
+    #         cmd.replace("\r\n", "\n").replace("\r", "").strip().split("\n")
+    #     )  # 对于多行命令的处理
+    #     f_cmd_lines_skip = False  # 是否处理完发送的命令
+    #     f_prompt_received = False  # 是否匹配终端提示符
+    #     # res = ""  # 有效输出
 
-        record = CmdRecord[str](cmd, f"[{self.name}]{self.prompt_now}")
-        self.cmds.append(record)
-        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
-        self.shell.send(
-            bytes(cmd + "\r\n", "utf-8")
-        )  # 发送的字符同样会进入接收当中，需要去重
+    #     record = CmdRecord[str](cmd, f"[{self.name}]{self.prompt_now}")
+    #     self.cmds.append(record)
+    #     record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+    #     self.shell.send(
+    #         bytes(cmd + "\r\n", "utf-8")
+    #     )  # 发送的字符同样会进入接收当中，需要去重
 
-        while True:
-            if self.shell.recv_ready():  # 缓冲非空
-                rcv = self.shell.recv(65535)  # 接收
+    #     while True:
+    #         if self.shell.recv_ready():  # 缓冲非空
+    #             rcv = self.shell.recv(65535)  # 接收
 
-                buf += rcv  # 存入buf
-                while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
-                    buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
-                    line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
-                    line = line_b.decode().rstrip().replace("\r", "")
+    #             buf += rcv  # 存入buf
+    #             while b"\r\n" in buf or b"\n" in buf:  # buf中有换行符就一直处理
+    #                 buf = buf.replace(b"\r\n", b"\n")  # 统一换行符
+    #                 line_b, buf = buf.split(b"\n", 1)  # 获取buf中的第一行
+    #                 line = line_b.decode().rstrip().replace("\r", "")
 
-                    if (
-                        len(cmd_lines) == 0 and not f_cmd_lines_skip
-                    ):  # 未处理的多行命令为空并且命令处理完成标志未置位
-                        f_cmd_lines_skip = True  # 标志置位
+    #                 if (
+    #                     len(cmd_lines) == 0 and not f_cmd_lines_skip
+    #                 ):  # 未处理的多行命令为空并且命令处理完成标志未置位
+    #                     f_cmd_lines_skip = True  # 标志置位
 
-                    if (
-                        not f_cmd_lines_skip  # 命令处理完成标志未置位
-                        and cmd_lines[0] in remove_ansi(line)  # 命令行与当前行相等
-                        and len(cmd_lines) > 0  # 命令行未处理完毕
-                    ):
-                        cmd_lines.pop(0)  # 弹出处理完的命令
-                        continue
-                    if self.prompt_complie.search(
-                        remove_ansi(line)
-                    ):  # 当前行与命令行提示符匹配
-                        self.prompt_now = remove_ansi(line).strip(
-                            "\r\n "
-                        )  # 更新命令行提示符
-                        f_prompt_received = True  # 命令行提示符处理完成标志置位
-                        break
-                    record.result.append(Term.putsln(line))
-                if f_prompt_received:
-                    break
+    #                 if (
+    #                     not f_cmd_lines_skip  # 命令处理完成标志未置位
+    #                     and cmd_lines[0] in remove_ansi(line)  # 命令行与当前行相等
+    #                     and len(cmd_lines) > 0  # 命令行未处理完毕
+    #                 ):
+    #                     cmd_lines.pop(0)  # 弹出处理完的命令
+    #                     continue
+    #                 if self.prompt_complie.search(
+    #                     remove_ansi(line)
+    #                 ):  # 当前行与命令行提示符匹配
+    #                     self.prompt_now = remove_ansi(line).strip(
+    #                         "\r\n "
+    #                     )  # 更新命令行提示符
+    #                     f_prompt_received = True  # 命令行提示符处理完成标志置位
+    #                     break
+    #                 record.result.append(Term.putsln(line))
+    #             if f_prompt_received:
+    #                 break
 
-            time.sleep(0.005)
+    #         time.sleep(0.005)
 
-        record.record_end()
-        record.exit_code = self._get_exit_code()
-        self.last_record = record
-        return record
+    #     record.record_end()
+    #     record.exit_code = self._get_exit_code()
+    #     self.last_record = record
+    #     return record
 
     def run(self, cmd: str) -> CmdRecord[str]:
         """执行命令，返回命令记录，保证cmd为单个命令，不作命令拆分处理"""
@@ -966,31 +1096,57 @@ class SFTP:
     套壳实现了大部分同名方法，修改了部分有返回值的方法，以保持风格一致"""
 
     def __init__(self, ssh: SSH):
-        self.meta_record = MetaRecord(
-            type="SFTP",
-            name=ssh.name,
-            info=ssh.meta_record.info,
-        )
+        # self.meta_record = MetaRecord(
+        #     type="SFTP",
+        #     name=ssh.name,
+        #     info=ssh.meta_record.info,
+        # )
         self.name = ssh.name
         self.ssh = ssh
         # self.tmp_channel = ssh.remote.open_sftp().get_channel()
-        self.prompt = f"[{self.meta_record.name}][{self.meta_record.type}] >>>"
+        self.prompt = "SFTP >>>"
         self.cmds: list[CmdRecord] = []
         self.last_record: CmdRecord | None = None
         # self.aty_channel = Channel(ssh)
         self.sftp = ssh.remote.open_sftp()
-        self.meta_record.logs.append(
-            Term.putsln(self.meta_record.get_fmt_prompt() + " Opened")
+        MessageBus.publish(
+            Message[data_CONNECT](
+                type=MessageType.CONNECT,
+                source=MessageSource.SFTP,
+                timestamp=Timestamp(),
+                data=data_CONNECT(
+                    name=self.name,
+                    id_key=ssh.remote_config.user + "@" + ssh.remote_config.host,
+                    info="Opened",
+                ),
+            )
         )
+        # self.meta_record.logs.append(
+        #     Term.putsln(self.meta_record.get_fmt_prompt() + " Opened")
+        # )
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.meta_record.logs.append(
-            Term.putsln(self.meta_record.get_fmt_prompt() + " Closed")
-        )
+        # self.meta_record.logs.append(
+        #     Term.putsln(self.meta_record.get_fmt_prompt() + " Closed")
+        # )
         self.sftp.close()
+        MessageBus.publish(
+            Message[data_DISCONNECT](
+                type=MessageType.DISCONNECT,
+                source=MessageSource.SFTP,
+                timestamp=Timestamp(),
+                data=data_DISCONNECT(
+                    name=self.name,
+                    id_key=self.ssh.remote_config.user
+                    + "@"
+                    + self.ssh.remote_config.host,
+                    info="Opened",
+                ),
+            )
+        )
         return False
 
     # def create_channel(self, *args, **kwargs) -> Channel:

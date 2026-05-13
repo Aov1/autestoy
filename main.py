@@ -1,7 +1,10 @@
+import time
+
 import autestoy as att
 from autestoy.export.messageio import (
     Message,
     MessageBus,
+    MessageDispatcher,
     MessageSource,
     MessageType,
     data_LOG,
@@ -16,6 +19,9 @@ remote_conf = att.RemoteConfig(
 ).set_name("vDebian13")
 
 msgterm = MessageTerminal()
+disp = MessageDispatcher()
+disp.link_line(msgterm).start()
+disp.start()
 
 with (
     att.SSH(remote_conf) as debain,
@@ -26,10 +32,30 @@ with (
 
     fast_channel.run_lines("pwd\n" * 100)
 
-    msg = Message(
+    # msg = Message[data_LOG](
+    #     type=MessageType.LOG,
+    #     source=MessageSource.USER,
+    #     timestamp=Timestamp(),
+    #     data=data_LOG(name="main_dbg", log="This is a test message"),
+    # )
+    st = Timestamp()
+    for i in range(100000):
+        msg = Message[data_LOG](
+            type=MessageType.LOG,
+            source=MessageSource.USER,
+            timestamp=Timestamp(),
+            data=data_LOG(name="main_dbg", log=f"This is a test message {i}"),
+        )
+        MessageBus.publish(msg)
+    msg = Message[data_LOG](
         type=MessageType.LOG,
         source=MessageSource.USER,
         timestamp=Timestamp(),
-        data=data_LOG(name="main_dbg", log="This is a test message"),
+        data=data_LOG(name="END END END", log="This is a test message END LAST ONE"),
     )
     MessageBus.publish(msg)
+    ed = Timestamp()
+
+
+disp.join()
+print(f"Time cost 10000 msg: {ed - st}")

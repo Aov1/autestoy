@@ -27,6 +27,7 @@ from .messageio import (
     MessageBus,
     MessageSource,
     MessageType,
+    OutputLine,
     data_CMD_OUTPUT,
     data_CMD_PROMPT,
     data_LOG,
@@ -163,23 +164,38 @@ class MessageStyle:
     user_dbg_ansi: str = AnsiColor.yellow
 
 
-class MessageTerminal:
+class MessageTerminal(OutputLine):
     """消息终端，用于输出消息到终端"""
 
     def __init__(
         self,
+        name: str = "terminal",
+        maxsize: int = 0,
         writable: Callable[[str], Any] = sys.stdout.write,
         style: MessageStyle = MessageStyle(),
         absoulute_timestamp: bool = False,
     ):
+        super().__init__(name=name, maxsize=maxsize)
         self.timebase = GLOBAL_timebase
         self.timestamp = Timestamp()
         self.absoulute_timestamp = absoulute_timestamp
         self.write = writable
         self.style = style
-        MessageBus.subscribe(MessageType.CMD_PROMPT, self._event_cmd_prompt)
-        MessageBus.subscribe(MessageType.CMD_OUTPUT, self._event_cmd_output)
-        MessageBus.subscribe(MessageType.LOG, self._event_log)
+
+        # MessageBus.subscribe(MessageType.CMD_PROMPT, self._event_cmd_prompt)
+        # MessageBus.subscribe(MessageType.CMD_OUTPUT, self._event_cmd_output)
+        # MessageBus.subscribe(MessageType.LOG, self._event_log)
+
+    def handle(self, msg: Message) -> None:
+        match msg.type:
+            case MessageType.CMD_PROMPT:
+                self._event_cmd_prompt(msg)
+            case MessageType.CMD_OUTPUT:
+                self._event_cmd_output(msg)
+            case MessageType.LOG:
+                self._event_log(msg)
+            case _:
+                pass
 
     def _ts(
         self,
@@ -230,7 +246,7 @@ class MessageTerminal:
         string = make_ansi(
             (f"[{ts}]", self.style.timestamp_ansi, AnsiReset),
             " ",
-            (f"{[id]}", self.style.command_header_ansi, AnsiReset),
+            (f"[{id}]", self.style.command_header_ansi, AnsiReset),
             (output, self.style.message_ansi, AnsiReset),
         )
         self.write(string + "\n")

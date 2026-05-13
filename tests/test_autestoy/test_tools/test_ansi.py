@@ -2,8 +2,11 @@ from autestoy.tools.ansi import (
     AnsiBackground,
     AnsiColor,
     AnsiReset,
-    remove_ansi,
+    get_ansi_background_from,
+    get_ansi_color_from,
+    get_ansi_style_from,
     # remove_ansi_bytes,
+    remove_ansi,
 )
 
 
@@ -25,3 +28,8 @@ def test_Ansi():
     s = f"{AnsiBackground.light_blue}{AnsiColor.green}World{AnsiReset}"
     print(s)
     assert s == "\x1b[104m\x1b[32mWorld\x1b[0m"
+
+
+def test_get_ansi_color_from():
+    assert get_ansi_color_from("") == ""
+    assert get_ansi_color_from("\x1b[31m") == "\x1b[31m"

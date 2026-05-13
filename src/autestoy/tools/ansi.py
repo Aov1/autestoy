@@ -53,6 +53,13 @@ class AnsiStyle(StrEnum):
     delateline = "\033[9m"
 
 
+def get_ansi_style_from(string: str) -> str:
+    match = re.search(r"\033\[[1-9]m", string)
+    if match:
+        return match.group(0)
+    return ""
+
+
 class AnsiColor(StrEnum):
     none = ""
     black = "\033[30m"
@@ -74,6 +81,15 @@ class AnsiColor(StrEnum):
     light_white = "\033[97m"
 
 
+def get_ansi_color_from(string: str) -> str:
+    match = re.search(
+        r"(\033|\x1b)\[([39][0-7]|38;5;[0-9]+|38;2;[0-9]+;[0-9]+;[0-9]+)m", string
+    )
+    if match:
+        return match.group()
+    return ""
+
+
 class AnsiBackground(StrEnum):
     none = ""
     black = "\033[40m"
@@ -93,6 +109,15 @@ class AnsiBackground(StrEnum):
     light_magenta = "\033[105m"
     light_cyan = "\033[106m"
     light_white = "\033[107m"
+
+
+def get_ansi_background_from(string: str) -> str:
+    match = re.search(
+        r"(\033|\x1b)\[((4)|(10)[0-7]|48;5;[0-9]+|48;2;[0-9]+;[0-9]+;[0-9]+)m", string
+    )
+    if match:
+        return match.group(0)
+    return ""
 
 
 def AnsiColor256(color: int) -> str:
@@ -117,6 +142,33 @@ def AnsiBackgroundTrueColor(r: int, g: int, b: int) -> str:
     g = max(0, min(255, g))
     b = max(0, min(255, b))
     return f"\033[48;2;{r};{g};{b}m"
+
+
+def exchange_ansi_color_background(ansi_string: str) -> str:
+    if get_ansi_color_from(ansi_string) != "":
+        if res := re.search(r"(\033|\x1b)\[(3|9)([0-7]m)", ansi_string):
+            return f"\033[{int(res.group(2)) + 1}{res.group(3)}"
+        elif res := re.search(r"(\033|\x1b)\[38;5;([0-9]+)m", ansi_string):
+            return f"\033[48;5;{res.group(2)}m"
+        elif res := re.search(
+            r"(\033|\x1b)\[38;2;([0-9]+);([0-9]+);([0-9]+)m", ansi_string
+        ):
+            return f"\033[48;2;{res.group(2)};{res.group(3)};{res.group(4)}m"
+        else:
+            return ""
+    elif get_ansi_background_from(ansi_string) != "":
+        if res := re.search(r"(\033|\x1b)\[(4|10)([0-7]m)", ansi_string):
+            return f"\033[{int(res.group(2)) - 1}{res.group(3)}"
+        elif res := re.search(r"(\033|\x1b)\[48;5;([0-9]+)m", ansi_string):
+            return f"\033[38;5;{res.group(2)}m"
+        elif res := re.search(
+            r"(\033|\x1b)\[48;2;([0-9]+);([0-9]+);([0-9]+)m", ansi_string
+        ):
+            return f"\033[38;2;{res.group(2)};{res.group(3)};{res.group(4)}m"
+        else:
+            return ""
+    else:
+        return ""
 
 
 def ansi(string: str, before: str | None = None, after: str | None = None) -> str:

@@ -164,8 +164,8 @@ def rt_ts_res_msg(msg: str) -> tuple[Timestamp, Result[str]]:
 @dataclass
 class MessageStyle:
     timestamp_ansi: str = AnsiStyle.bold + AnsiColor.black + AnsiBackground.light_blue
-    command_header_ansi: str = AnsiColor.light_green
-    message_ansi: str = AnsiColor.none + AnsiStyle.dark
+    command_header_ansi: str = AnsiColor.light_green + AnsiStyle.dark
+    message_ansi: str = AnsiColor.none + AnsiStyle.bold
     protocol_connect_header: str = (
         AnsiStyle.bold + AnsiColor.black + AnsiBackground.light_yellow
     )
@@ -179,13 +179,13 @@ class MessageStyle:
         AnsiStyle.bold + AnsiColor.black + AnsiBackground.light_red
     )
 
-    log_header_ansi: str = AnsiColor.yellow
+    log_header_ansi: str = AnsiColor.yellow + AnsiStyle.bold
     log_message_ansi: str = AnsiColor.none
     warning_header_ansi: str = AnsiStyle.bold + AnsiColor.yellow
     warning_message_ansi: str = AnsiColor.none
     error_header_ansi: str = AnsiStyle.bold + AnsiColor.red
     error_message_ansi: str = AnsiColor.none
-    user_header_ansi: str = AnsiColor.yellow
+    user_header_ansi: str = AnsiColor.yellow + AnsiStyle.bold
     user_message_ansi: str = AnsiColor.none
 
 
@@ -206,10 +206,6 @@ class MessageTerminal(OutputLine):
         self.absoulute_timestamp = absoulute_timestamp
         self.write = writable
         self.style = style
-
-        # MessageBus.subscribe(MessageType.CMD_PROMPT, self._event_cmd_prompt)
-        # MessageBus.subscribe(MessageType.CMD_OUTPUT, self._event_cmd_output)
-        # MessageBus.subscribe(MessageType.LOG, self._event_log)
 
     def handle(self, msg: Message) -> None:
         match msg.type:

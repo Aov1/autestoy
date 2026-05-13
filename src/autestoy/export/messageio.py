@@ -33,6 +33,20 @@ class data_CMD_OUTPUT:
 
 
 @dataclass(frozen=True)
+class data_CONNECT:
+    name: str | None
+    id_key: str
+    info: str
+
+
+@dataclass(frozen=True)
+class data_DISCONNECT:
+    name: str | None
+    id_key: str
+    info: str
+
+
+@dataclass(frozen=True)
 class data_LOG:
     name: str
     log: str
@@ -213,6 +227,18 @@ class MessageBus:
     #         cls._messages_callback_map.clear()
 
     #     return messages
+    # ==========some method===============
+    @classmethod
+    def ulog(cls, string: str, name: str = "DBG") -> None:
+        """内置的user log方法"""
+        MessageBus.publish(
+            Message[data_LOG](
+                type=MessageType.LOG,
+                source=MessageSource.USER,
+                timestamp=Timestamp(),
+                data=data_LOG(name=name, log=string),
+            )
+        )
 
 
 _DISP_ID = count(0)
@@ -266,11 +292,6 @@ class MessageDispatcher:
             or MessageBus.publish_count() != MessageBus.consume_count()
         ):
             time.sleep(0.1)
-            print(
-                MessageBus.fifo_size(),
-                MessageBus.publish_count(),
-                MessageBus.consume_count(),
-            )
         for line in self._lines.values():
             line.join(timeout)
 

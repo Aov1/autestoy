@@ -6,18 +6,18 @@ import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import Generic, Iterator, override
+from typing import Generic, Iterator, TypeVar, override
 
 from paramiko.channel import ChannelFile as pk_ChannelFile
 from paramiko.channel import ChannelStderrFile as pk_ChannelStderrFile
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
 from ..export.term import Term, TermStyle
-from ..tools.result import Result, T
+from ..tools.result import Result
 from ..tools.timestamp import Timestamp
 from .ansi import AnsiReset, remove_ansi
 
-# T = TypeVar("T")
+T = TypeVar("T")
 
 
 """
@@ -31,7 +31,7 @@ Cmd output line example:
 """
 
 
-class CmdRecord(Generic[T]):
+class CmdRecord[T]:
     """命令记录类，用于记录命令的执行结果，规范不同协议发送输出的内容"""
 
     _cmd_id: int = 0
@@ -63,7 +63,7 @@ class CmdRecord(Generic[T]):
     def __contains__(self, string: str) -> bool:
         """支持if string in record的判断，对于每一行进行检索"""
         for each_line in self.get_result():
-            if string in each_line:
+            if string in str(each_line):
                 return True
         return False
 
@@ -107,23 +107,27 @@ class CmdRecord(Generic[T]):
         out = self.get_fmt_prompt()
         return out
 
-    def get_result(self) -> list[str]:
+    # def get_result
+    def get_result(self) -> list[T]:
         """获取命令的输出结果，去除Result，去除ansi转义\n
         对于非str类型的结果尝试转换为str"""
-        return [remove_ansi(str(e[1].get())) for e in self.result]
+        tmp = [e[1].get() for e in self.result]
+        return [remove_ansi(str(e)) if isinstance(e, str) else e for e in tmp]
 
     def get_result_string(self) -> str:
         """获取命令的输出结果字符串，将多行输出合并，去除ansi转义"""
-        return "\n".join(self.get_result())
+        return "\n".join((str(e) for e in self.get_result_iter()))
 
-    def get_result_iter(self) -> Iterator[str]:
+    def get_result_iter(self) -> Iterator[T]:
         """获取命令的输出结果迭代器，去除ansi转义"""
-        return (remove_ansi(str(e[1].get())) for e in self.result)
+        for _, res in self.result:
+            val = res.get()
+            yield remove_ansi(val) if isinstance(val, str) else val
 
     def search(self, re_string: str) -> re.Match[str] | None:
         """搜索命令的输出结果，匹配立即返回re.Match对象，未匹配返回None"""
         for line in self.get_result_iter():
-            match = re.search(re_string, line)
+            match = re.search(re_string, str(line))
             if match:
                 return match
         return None
@@ -143,7 +147,7 @@ class CmdRecord(Generic[T]):
         result = []
         for line in self.get_result_iter():
             tmp = []
-            res = re.split(re_delimiter, line)
+            res = re.split(re_delimiter, str(line))
             for f in fields:
                 if f <= 0:
                     tmp = res
@@ -161,6 +165,7 @@ class CmdRecord(Generic[T]):
         支持多组索引，逗号分隔"""
         result = []
         for line in self.get_result_iter():
+            line = str(line)
             tmp = []
             for char_start, char_end in characters:
                 if char_start <= 1:
@@ -172,7 +177,7 @@ class CmdRecord(Generic[T]):
         return result
 
 
-class CmdRecording(CmdRecord, Generic[T]):
+class CmdRecording(CmdRecord[T]):
     """线程指令的记录类，添加了线程相关的处理"""
 
     def __init__(self, cmd: str, prompt: str) -> None:
@@ -290,7 +295,7 @@ class CmdRecording(CmdRecord, Generic[T]):
                     return lines, True  # 匹配到立即返回
 
 
-class MetaRecord(Generic[T]):
+class MetaRecord[T]:
     """元记录，记录类的log"""
 
     def __init__(self, type: str, name: str, info: str) -> None:

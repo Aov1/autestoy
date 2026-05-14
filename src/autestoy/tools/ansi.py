@@ -6,6 +6,9 @@ import re
 from enum import StrEnum
 from typing import Optional, TypeVar, overload
 
+T = TypeVar("T")
+
+
 ANSI_ESCAPE_B = re.compile(rb"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
@@ -30,13 +33,15 @@ def remove_ansi(text: str) -> str: ...
 #     return ANSI_ESCAPE_B.sub(b"", text)
 
 
-def remove_ansi(text: str | bytes) -> str | bytes:
+def remove_ansi(text: T) -> T:
     if isinstance(text, bytes):
         global ANSI_ESCAPE_B
         return ANSI_ESCAPE_B.sub(b"", text)
-    else:
+    elif isinstance(text, str):
         global ANSI_ESCAPE
         return ANSI_ESCAPE.sub("", text)
+    else:
+        return text
 
 
 AnsiReset = "\033[0m"

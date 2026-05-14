@@ -8,11 +8,17 @@ from typing import Generator, Iterable, Self
 
 from telnetlib3.sync import TelnetConnection
 
-from autestoy.tools.ansi import remove_ansi
+from ..export.messageio import (
+    MessageBus_publish_prompt_with_Record,
+    MessageBus_publish_result_with_Record,
+    MessageSource,
+)
 
-from ..export.collect import CollectObj, CollectType, collect
+# from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import PROMPT_pattern as prompt_pattern_default
-from ..export.term import Term
+
+# from ..export.term import Term
+from ..tools.ansi import remove_ansi
 from ..tools.record import CmdRecord
 
 
@@ -39,7 +45,7 @@ class TelnetConfig:
         return self
 
 
-@collect(CollectType.Telnet, CollectObj)
+# @collect(CollectType.Telnet, CollectObj)
 class Telnet:
     def __init__(self, telnet_conf: TelnetConfig) -> None:
         """基础的Telnet功能，非终端链接；终端交互请使用TelnetShell"""
@@ -51,6 +57,7 @@ class Telnet:
             timeout=telnet_conf.timeout,
             encoding=telnet_conf.encoding,
         )
+        self.host_port = f"{telnet_conf.host}:{telnet_conf.port}"
         self.tel3.connect()
         if not self.is_connected():
             raise RuntimeError(
@@ -157,13 +164,18 @@ class TelnetShell(Telnet):
         """执行shell命令，返回输出"""
         record = CmdRecord(
             cmd=cmd,
-            prompt=f"[{self.name}][{self.conf.host}:{self.conf.port}]{self.prompt}",
+            prompt=f"{self.prompt}",
+            source=MessageSource.TELNET,
+            id_key=self.host_port,
+            name=self.name,
         )
         self.cmds.append(record)
-        record.start_time, _ = Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
+        # record.start_time, _ = Term.putsln(record.get_fmt_prompt())
         for line in self.shell_run_line_generator(cmd):
-            timestamp, _ = Term.putsln(line)
-            record.result_append(line, timestamp)
+            # timestamp, _ = Term.putsln(line)
+            record.result_append(line)
+            MessageBus_publish_result_with_Record(record)
         record.record_end()
         return record
 

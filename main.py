@@ -15,7 +15,7 @@ from autestoy.tools.timestamp import Timestamp
 remote_conf = att.RemoteConfig(
     user="aoiiix",
     # host="192.168.51.12",
-    host="192.168.51.12",
+    host="192.168.110.28",
     password="0402",
 ).set_name("vDebian13")
 

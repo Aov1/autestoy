@@ -14,9 +14,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from itertools import count
+from typing import TYPE_CHECKING, Union
 
 # from typing import Callable, Union
-from ..tools.record import CmdRecord, CmdRecording
+# from ..tools.record import CmdRecord, CmdRecording
 from ..tools.timestamp import Timestamp
 
 
@@ -405,6 +406,10 @@ class OutputLine(ABC):
                         f"OutputLine-{self._name}: _callback Error: {e}",
                         file=sys.stderr,
                     )
+
+
+if TYPE_CHECKING:
+    from ..tools.record import CmdRecord, CmdRecording
 
 
 def MessageBus_publish_prompt_with_Record(

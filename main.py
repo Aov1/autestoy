@@ -15,7 +15,7 @@ from autestoy.tools.timestamp import Timestamp
 remote_conf = att.RemoteConfig(
     user="aoiiix",
     # host="192.168.51.12",
-    host="192.168.110.28",
+    host="192.168.51.12",
     password="0402",
 ).set_name("vDebian13")
 
@@ -37,21 +37,20 @@ with (
     st = Timestamp()
     for i in range(10):
         MessageBus.ulog(f"This is a test message {i}", name="main_dbg")
-    #     msg = Message[data_LOG](
-    #         type=MessageType.LOG,
-    #         source=MessageSource.USER,
-    #         timestamp=Timestamp(),
-    #         data=data_LOG(name="main_dbg", log=f"This is a test message {i}"),
-    #     )
-    #     MessageBus.publish(msg)
-    # msg = Message[data_LOG](
-    #     type=MessageType.LOG,
-    #     source=MessageSource.USER,
-    #     timestamp=Timestamp(),
-    #     data=data_LOG(name="END END END", log="This is a test message END LAST ONE"),
-    # )
-    # MessageBus.publish(msg)
     ed = Timestamp()
+
+    sftp = debain.create_sftp()
+    sftp.listdir()
+    sftp.listdir_attr()
+    for i in sftp.listdir_iter().result[0][1].get():
+        MessageBus.ulog(str(i), name="main_dbg")
+    sftp.close()
 
 
 disp.join()
+
+
+#
+import subprocess as sp
+
+sp.run("pwd", shell=True)

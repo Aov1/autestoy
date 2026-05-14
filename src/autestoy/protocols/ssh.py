@@ -23,10 +23,12 @@ from paramiko.sftp_attr import SFTPAttributes
 from paramiko.sftp_file import SFTPFile
 
 # 相对调用
-from ..export.collect import CollectObj, CollectType, collect
+# from ..export.collect import CollectObj, CollectType, collect
 from ..export.messageio import (
     Message,
     MessageBus,
+    MessageBus_publish_prompt_with_Record,
+    MessageBus_publish_result_with_Record,
     MessageSource,
     MessageType,
     data_CMD_OUTPUT,
@@ -50,39 +52,6 @@ from ..tools.timestamp import Timestamp
 # 这两项是为了兼容paramiko SFTPClient 方法的参数类型
 StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]
 _Callback: TypeAlias = Callable[[int, int], object]
-
-
-def MessageBus_publish_prompt_with_Record(
-    record: CmdRecord,
-) -> None:
-    """将CmdRecord发布到MessageBus"""
-    MessageBus.publish(
-        Message(
-            type=MessageType.CMD_PROMPT,
-            source=record.source,
-            timestamp=record.start_time,
-            data=data_CMD_PROMPT(
-                id=record.id,
-                name=record.name,
-                prompt=record.prompt,
-                command=record.cmd,
-            ),
-        )
-    )
-
-
-def MessageBus_publish_result_with_Record(
-    record: CmdRecord,
-) -> None:
-    """将CmdRecord发布到MessageBus"""
-    MessageBus.publish(
-        Message(
-            type=MessageType.CMD_OUTPUT,
-            source=record.source,
-            timestamp=record.result[-1][0],
-            data=data_CMD_OUTPUT(id=record.id, output=str(record.result[-1][1].get())),
-        )
-    )
 
 
 class RemoteConfig:
@@ -127,7 +96,7 @@ class RemoteConfig:
         return self
 
 
-@collect(CollectType.SSH, CollectObj)
+# @collect(CollectType.SSH, CollectObj)
 class SSH:
     """SSH协议类，用于连接远程主机"""
 
@@ -617,7 +586,7 @@ class SSH:
         return self.exec_run(f"kill -9 {pid}")
 
 
-@collect(CollectType.Channel, CollectObj)
+# @collect(CollectType.Channel, CollectObj)
 class Channel:
     """通道类，用于管理SSH通道"""
 
@@ -1000,7 +969,7 @@ class Channel:
             )
 
 
-@collect(CollectType.SFTP, CollectObj)
+# @collect(CollectType.SFTP, CollectObj)
 class SFTP:
     """继承自paramiko的SFTPClient，实现时间戳记录，用法与SFTPClient基本一致\n
     套壳实现了大部分同名方法，修改了部分有返回值的方法，以保持风格一致"""

@@ -15,6 +15,7 @@ from enum import Enum, StrEnum, auto
 from itertools import count
 from typing import Callable, Union
 
+from ..tools.record import CmdRecord, CmdRecording
 from ..tools.timestamp import Timestamp
 
 
@@ -67,8 +68,6 @@ class data_ERROR:
 class MessageType(Enum):
     CMD_PROMPT = auto()
     CMD_OUTPUT = auto()
-    # CMD_ERROR = auto()
-    # CMD_END = auto()
     CONNECT = auto()
     DISCONNECT = auto()
     LOG = auto()
@@ -77,13 +76,14 @@ class MessageType(Enum):
 
 
 class MessageSource(StrEnum):
-    USER = auto()
-    SYSTEM = auto()
-    SSH = auto()
-    SSH_CHANNEL = auto()
-    SFTP = auto()
-    SERIAL = auto()
-    TELNET = auto()
+    USER = auto()  # 使用者自行操作
+    SYSTEM = auto()  # 系统信息
+    SSH = auto()  # 协议-SSH
+    SSH_CHANNEL = auto()  # 协议-SSH-CHANNEL
+    SFTP = auto()  # 协议-SSH-SFTP
+    SERIAL = auto()  # 协议-串行总线
+    TELNET = auto()  # 协议-Telnet
+    LOCAL = auto()  # 本机操作
 
 
 _MSGSEQ = count(0)
@@ -404,3 +404,36 @@ class OutputLine(ABC):
                         f"OutputLine-{self._name}: _callback Error: {e}",
                         file=sys.stderr,
                     )
+
+
+def MessageBus_publish_prompt_with_Record(
+    record: CmdRecord | CmdRecording,
+) -> None:
+    """将CmdRecord发布到MessageBus"""
+    MessageBus.publish(
+        Message(
+            type=MessageType.CMD_PROMPT,
+            source=record.source,
+            timestamp=record.start_time,
+            data=data_CMD_PROMPT(
+                id=record.id,
+                name=record.name,
+                prompt=record.prompt,
+                command=record.cmd,
+            ),
+        )
+    )
+
+
+def MessageBus_publish_result_with_Record(
+    record: CmdRecord | CmdRecording,
+) -> None:
+    """将CmdRecord发布到MessageBus"""
+    MessageBus.publish(
+        Message(
+            type=MessageType.CMD_OUTPUT,
+            source=record.source,
+            timestamp=record.result[-1][0],
+            data=data_CMD_OUTPUT(id=record.id, output=str(record.result[-1][1].get())),
+        )
+    )

@@ -3,16 +3,17 @@ from __future__ import annotations
 import time
 from typing import overload
 
-from ..export.collect import CollectObj, CollectType, collect
+# from ..export.collect import CollectObj, CollectType, collect
+from ..export.messageio import Message, MessageBus
 from ..export.term import Term, TermStyle
 from .ansi import AnsiColor, AnsiReset
-from .record import CmdRecord
 
+# from .record import CmdRecord
 # from .result import Result
 from .timestamp import Timestamp
 
 
-@collect(CollectType.TrySeconds, CollectObj)
+# @collect(CollectType.TrySeconds, CollectObj)
 class TrySeconds:
     """创建一个计时器，经过设置的时间后将返回False"""
 
@@ -44,28 +45,29 @@ class TrySeconds:
 
 def ulog(
     *msg: object,
-    show_timestamp: bool = True,
-    override_font_color: str | None = None,
-    override_background_color: str | None = None,
-) -> CmdRecord[str]:
-    """用户Log，终端输出"""
+    # show_timestamp: bool = True,
+    # override_font_color: str | None = None,
+    # override_background_color: str | None = None,
+) -> None:
+    """用户Log，MessageBus输出"""
     long_msg = " ".join(str(m) for m in msg)
-    msg_lines = long_msg.splitlines()
-    record = CmdRecord(
-        cmd=long_msg,
-        prompt="[User Log]:",
-        create_id=False,
-    )
-    font_color = override_font_color or TermStyle.log_font_color
-    background_color = override_background_color or TermStyle.log_background_color
-    for line in msg_lines:
-        if show_timestamp:
-            Term.puts_timestamp()
-        Term.puts_msg(
-            f"{TermStyle.prompt_background_color}{TermStyle.prompt_font_color}{record.prompt}{AnsiReset} {background_color}{font_color}{line}{AnsiReset}\n"
-        )
-    record.record_end()
-    return record
+    MessageBus.ulog(long_msg, name="User Log")
+    # msg_lines = long_msg.splitlines()
+    # record = CmdRecord(
+    #     cmd=long_msg,
+    #     prompt="[User Log]:",
+    #     create_id=False,
+    # )
+    # font_color = override_font_color or TermStyle.log_font_color
+    # background_color = override_background_color or TermStyle.log_background_color
+    # for line in msg_lines:
+    #     if show_timestamp:
+    #         Term.puts_timestamp()
+    #     Term.puts_msg(
+    #         f"{TermStyle.prompt_background_color}{TermStyle.prompt_font_color}{record.prompt}{AnsiReset} {background_color}{font_color}{line}{AnsiReset}\n"
+    #     )
+    # record.record_end()
+    # return record
 
 
 @overload

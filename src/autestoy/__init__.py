@@ -8,12 +8,12 @@ from __future__ import annotations
 # ──────────────────────────────────────────────
 # 导出 - 输出收集
 # ──────────────────────────────────────────────
-from .export.collect import CollectObj, CollectType, collect
-
+# from .export.collect import CollectObj, CollectType, collect
 # ──────────────────────────────────────────────
 # 导出 - Markdown / Obsidian
 # ──────────────────────────────────────────────
 from .export.markdown import MarkdownExporter, ObsidianExporter
+from .export.messageio import Message, MessageBus, MessageSource, MessageType, data_LOG
 
 # ──────────────────────────────────────────────
 # 导出 - 终端输出
@@ -24,6 +24,11 @@ from .export.term import PROMPT_pattern, Term, TermStyle, get_terminal_size
 # 协议层 - JTAG（占位）
 # ──────────────────────────────────────────────
 from .protocols.jtag import Jtag
+
+# ──────────────────────────────────────────────
+# 工具 - 本地执行
+# ──────────────────────────────────────────────
+from .protocols.local import Local
 
 # ──────────────────────────────────────────────
 # 协议层 - 元编程 / DUT 配置基类
@@ -86,11 +91,6 @@ from .tools.globalvar import GLOBAL_has_init, GLOBAL_timebase
 from .tools.gui import Gui
 
 # ──────────────────────────────────────────────
-# 工具 - 本地执行
-# ──────────────────────────────────────────────
-from .tools.local import Local
-
-# ──────────────────────────────────────────────
 # 工具 - 命令记录
 # ──────────────────────────────────────────────
 from .tools.record import CmdRecord, CmdRecording, MetaRecord
@@ -121,9 +121,9 @@ __all__ = [
     "PROMPT_pattern",
     "get_terminal_size",
     # ── 输出收集 ──
-    "CollectObj",
-    "CollectType",
-    "collect",
+    # "CollectObj",
+    # "CollectType",
+    # "collect",
     # ── 导出 ──
     "MarkdownExporter",
     "ObsidianExporter",
@@ -220,16 +220,24 @@ def init() -> Timestamp:
         [INFO] Script start at [2026-01-01 12:00:00.000]
     """
     global GLOBAL_timebase
-    GLOBAL_timebase = Timestamp()
+    GLOBAL_timebase.update_timestamp()
     global GLOBAL_has_init
     GLOBAL_has_init = True
     # 终端相对时间基线
-    Term.set_time_base(GLOBAL_timebase)
-    Term.putsln(
-        f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}"
-        f"[INFO] Script start at [{GLOBAL_timebase}]"
-        f"{AnsiReset}"
+    MessageBus.publish(
+        Message[data_LOG](
+            type=MessageType.LOG,
+            source=MessageSource.SYSTEM,
+            timestamp=GLOBAL_timebase,
+            data=data_LOG(name="INFO", log=f"Script start at [{GLOBAL_timebase}]"),
+        )
     )
+    # Term.set_time_base(GLOBAL_timebase)
+    # Term.putsln(
+    #     f"{AnsiStyle.bold}{AnsiColor.black}{AnsiBackground.yellow}"
+    #     f"[INFO] Script start at [{GLOBAL_timebase}]"
+    #     f"{AnsiReset}"
+    # )
 
     return GLOBAL_timebase
 

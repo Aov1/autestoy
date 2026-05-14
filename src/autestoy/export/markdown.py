@@ -9,13 +9,12 @@ import os
 
 from autestoy.tools.record import CmdRecord
 
+# from ..tools.ansi import remove_ansi
+from ..protocols.local import Local
 from ..protocols.ssh import SFTP, SSH, Channel
 
-# from ..tools.ansi import remove_ansi
-from ..tools.local import Local
-
 # from .baseinfo import get_script_dir, get_script_name
-from .collect import CollectObj
+# from .collect import CollectObj
 from .term import Term
 
 
@@ -29,22 +28,22 @@ class MarkdownExporter:
         )
         self.cmd_records = []
 
-    def _get_cmd_records(self):
-        for each in CollectObj:
-            if isinstance(each[1], SSH):
-                self.cmd_records += each[1].cmds
-            elif isinstance(each[1], Channel):
-                self.cmd_records += each[1].cmds
-            elif isinstance(each[1], SFTP):
-                self.cmd_records += each[1].cmds
-            elif isinstance(each[1], Local):
-                self.cmd_records += each[1].cmds
+    # def _get_cmd_records(self):
+    #     for each in CollectObj:
+    #         if isinstance(each[1], SSH):
+    #             self.cmd_records += each[1].cmds
+    #         elif isinstance(each[1], Channel):
+    #             self.cmd_records += each[1].cmds
+    #         elif isinstance(each[1], SFTP):
+    #             self.cmd_records += each[1].cmds
+    #         elif isinstance(each[1], Local):
+    #             self.cmd_records += each[1].cmds
 
     def _sort_cmd_records(self):
         self.cmd_records.sort(key=lambda x: x.start_time)
 
     def save(self):
-        self._get_cmd_records()
+        # self._get_cmd_records()
         self._sort_cmd_records()
         with open(self.output_path + self.file_name, "w") as f:
             f.write("```bash\n")

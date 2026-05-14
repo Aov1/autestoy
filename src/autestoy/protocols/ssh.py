@@ -6,9 +6,7 @@ from __future__ import annotations
 import re
 import threading as td
 import time
-import warnings
 from os import PathLike
-from sqlite3.dbapi2 import TimestampFromTicks
 from typing import (
     IO,
     Callable,
@@ -53,10 +51,38 @@ from ..tools.timestamp import Timestamp
 StrOrBytesPath: TypeAlias = str | bytes | PathLike[str] | PathLike[bytes]
 _Callback: TypeAlias = Callable[[int, int], object]
 
-# 收集已经被创建的类，稍微丑陋
-# SSH_collect: dict[str, Any] = {}  # 记录所有创建的SSH类
-# Channel_collect: dict[str, Any] = {}  # 记录所有创建的Channel类
-# SFTP_collect: dict[str, Any] = {}  # 记录所有创建的STFP类
+
+def MessageBus_publish_prompt_with_Record(
+    record: CmdRecord,
+) -> None:
+    """将CmdRecord发布到MessageBus"""
+    MessageBus.publish(
+        Message(
+            type=MessageType.CMD_PROMPT,
+            source=record.source,
+            timestamp=record.start_time,
+            data=data_CMD_PROMPT(
+                id=record.id,
+                name=record.name,
+                prompt=record.prompt,
+                command=record.cmd,
+            ),
+        )
+    )
+
+
+def MessageBus_publish_result_with_Record(
+    record: CmdRecord,
+) -> None:
+    """将CmdRecord发布到MessageBus"""
+    MessageBus.publish(
+        Message(
+            type=MessageType.CMD_OUTPUT,
+            source=record.source,
+            timestamp=record.result[-1][0],
+            data=data_CMD_OUTPUT(id=record.id, output=str(record.result[-1][1].get())),
+        )
+    )
 
 
 class RemoteConfig:
@@ -321,42 +347,20 @@ class SSH:
         """
         head_path_info, _ = self._path_process("")
         record = CmdRecord[str](
-            f"cd {path}",
-            f"{head_path_info} $",
+            cmd=f"cd {path}",
+            prompt=f"{head_path_info} $",
+            source=MessageSource.SSH,
+            id_key=self.remote_config.user + "@" + self.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        MessageBus.publish(
-            Message[data_CMD_PROMPT](
-                type=MessageType.CMD_PROMPT,
-                source=MessageSource.SSH,
-                timestamp=record.start_time,
-                data=data_CMD_PROMPT(
-                    id=record.id,
-                    name=self.name,
-                    prompt=record.prompt,
-                    command=record.cmd,
-                ),
-            )
-        )
-        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         record.stdin, stdout, stderr = self.remote.exec_command(f"cd {path} && pwd")
 
         while True:
             if res := stderr.readline().strip():
-                # record.result.append(Term.putsln(res))
-                _rt, _res = rt_ts_res_msg(res)
-                record.result.append((_rt, _res))
-                MessageBus.publish(
-                    Message[data_CMD_OUTPUT](
-                        type=MessageType.CMD_OUTPUT,
-                        source=MessageSource.SSH,
-                        timestamp=_rt,
-                        data=data_CMD_OUTPUT(
-                            id=record.id,
-                            output=res,
-                        ),
-                    )
-                )
+                record.result.append(rt_ts_res_msg(res))
+                MessageBus_publish_result_with_Record(record)
 
                 break
             if res := stdout.readline():
@@ -387,42 +391,17 @@ class SSH:
         while not record.stdout.channel.exit_status_ready():
             line = record.stdout.readline()
             if line.strip() != "":
-                # record.result.append(Term.putsln(line.rstrip()))
                 res = line.strip()
-                _rt, _res = rt_ts_res_msg(res)
-                record.result.append((_rt, _res))
-                MessageBus.publish(
-                    Message[data_CMD_OUTPUT](
-                        type=MessageType.CMD_OUTPUT,
-                        source=MessageSource.SSH,
-                        timestamp=_rt,
-                        data=data_CMD_OUTPUT(
-                            id=record.id,
-                            output=res,
-                        ),
-                    )
-                )
-
+                record.result.append(rt_ts_res_msg(res))
+                MessageBus_publish_result_with_Record(record)
             time.sleep(0.01)
         else:
             while True:
                 line = record.stdout.readline()
                 if line.strip() != "":
-                    # record.result.append(Term.putsln(line.rstrip()))
                     res = line.strip()
-                    _rt, _res = rt_ts_res_msg(res)
-                    record.result.append((_rt, _res))
-                    MessageBus.publish(
-                        Message[data_CMD_OUTPUT](
-                            type=MessageType.CMD_OUTPUT,
-                            source=MessageSource.SSH,
-                            timestamp=_rt,
-                            data=data_CMD_OUTPUT(
-                                id=record.id,
-                                output=res,
-                            ),
-                        )
-                    )
+                    record.result.append(rt_ts_res_msg(res))
+                    MessageBus_publish_result_with_Record(record)
                 else:
                     break
             record.exit_code = record.stdout.channel.recv_exit_status()
@@ -454,26 +433,17 @@ class SSH:
         head_path_info, processed_cmd = self._path_process(tmp_cmd)
 
         record = CmdRecord[str](
-            cmd,
-            f"{head_path_info} $ sudo"
+            cmd=cmd,
+            prompt="{head_path_info} $ sudo"
             if sudo and password is not None
             else f"{head_path_info} $",
+            source=MessageSource.SSH,
+            id_key=self.remote_config.user + "@" + self.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
         record.start_time, _ = rt_ts_res_msg("")
-        MessageBus.publish(
-            Message[data_CMD_PROMPT](
-                type=MessageType.CMD_PROMPT,
-                source=MessageSource.SSH,
-                timestamp=record.start_time,
-                data=data_CMD_PROMPT(
-                    id=record.id,
-                    name=self.name,
-                    prompt=record.prompt,
-                    command=record.cmd,
-                ),
-            )
-        )
+        MessageBus_publish_prompt_with_Record(record)
         record.stdin, record.stdout, record.stderr = self.remote.exec_command(
             processed_cmd, get_pty=True
         )
@@ -536,24 +506,8 @@ class SSH:
             line = stdout.readline()
             if line != "":
                 line = line.rstrip()
-                record.result_append(line, ts := Timestamp())
-                MessageBus.publish(
-                    Message[data_CMD_OUTPUT](
-                        type=MessageType.CMD_OUTPUT,
-                        source=MessageSource.SSH,
-                        timestamp=ts,
-                        data=data_CMD_OUTPUT(
-                            id=record.id,
-                            output=line,
-                        ),
-                    )
-                )
-                # record.result.append(
-                #     Term.putsln(
-                #         line,
-                #         insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
-                #     )
-                # )
+                record.result_append(line, Timestamp())
+                MessageBus_publish_result_with_Record(record)
                 record.fifo.put(line)
             time.sleep(0.005)
         else:
@@ -562,24 +516,8 @@ class SSH:
                 if line == "":
                     break
                 line = line.rstrip()
-                record.result_append(line, ts := Timestamp())
-                MessageBus.publish(
-                    Message[data_CMD_OUTPUT](
-                        type=MessageType.CMD_OUTPUT,
-                        source=MessageSource.SSH,
-                        timestamp=ts,
-                        data=data_CMD_OUTPUT(
-                            id=record.id,
-                            output=line,
-                        ),
-                    )
-                )
-                # record.result.append(
-                #     Term.putsln(
-                #         line,
-                #         insert_str_before_msg=f"{AnsiColor.light_cyan}[{record.id}]{AnsiReset}",
-                #     )
-                # )
+                record.result_append(line, Timestamp())
+                MessageBus_publish_result_with_Record(record)
                 record.fifo.put(line)
             record.record_end()
             record.exit_code = stdout.channel.recv_exit_status()
@@ -595,8 +533,11 @@ class SSH:
         head_path_info, processed_cmd = self._path_process(cmd)
         processed_cmd = "echo $$ && " + processed_cmd  # 获取远程服务器的进程pid
         record = CmdRecording[str](
-            cmd,
-            f"{head_path_info} $",
+            cmd=cmd,
+            prompt=f"{head_path_info} $",
+            source=MessageSource.SSH,
+            id_key=self.remote_config.user + "@" + self.remote_config.host,
+            name=self.name,
         )
 
         self.cmds.append(record)
@@ -604,20 +545,7 @@ class SSH:
         task.daemon = True
         record.long_running_task = task
         if start_task:
-            MessageBus.publish(
-                Message[data_CMD_PROMPT](
-                    type=MessageType.CMD_PROMPT,
-                    source=MessageSource.SSH,
-                    timestamp=record.start_time,
-                    data=data_CMD_PROMPT(
-                        id=record.id,
-                        name=record.name,
-                        prompt=record.prompt,
-                        command=record.cmd,
-                    ),
-                )
-            )
-            # Term.putsln(record.get_fmt_prompt())
+            MessageBus_publish_prompt_with_Record(record)
             task.start()
 
         return record
@@ -893,38 +821,20 @@ class Channel:
         #     if e.strip() != "" and not e.strip().startswith("#")
         # ]
 
-        record = CmdRecord[str](cmd, f"{self.prompt_now}")
+        record = CmdRecord[str](
+            cmd=cmd,
+            prompt=f"{self.prompt_now}",
+            source=MessageSource.SSH_CHANNEL,
+            id_key=self.user_ip,
+            name=self.name,
+        )
         self.cmds.append(record)
         record.start_time = Timestamp()
-        MessageBus.publish(
-            Message[data_CMD_PROMPT](
-                type=MessageType.CMD_PROMPT,
-                source=MessageSource.SSH_CHANNEL,
-                timestamp=record.start_time,
-                data=data_CMD_PROMPT(
-                    id=record.id,
-                    name=self.name,
-                    prompt=record.prompt,
-                    command=record.cmd,
-                ),
-            )
-        )
+        MessageBus_publish_prompt_with_Record(record)
 
         for each_line in self._run_line_generator(cmd):
-            # timestamp, _ = Term.putsln(each_line)
-            ts = Timestamp()
-            MessageBus.publish(
-                Message[data_CMD_OUTPUT](
-                    type=MessageType.CMD_OUTPUT,
-                    source=MessageSource.SSH_CHANNEL,
-                    timestamp=ts,
-                    data=data_CMD_OUTPUT(
-                        id=record.id,
-                        output=each_line,
-                    ),
-                )
-            )
-            record.result_append(each_line, ts)
+            record.result_append(each_line, Timestamp())
+            MessageBus_publish_result_with_Record(record)
 
         record.record_end()
         record.exit_code = self._get_exit_code()
@@ -1116,7 +1026,9 @@ class SFTP:
                 timestamp=Timestamp(),
                 data=data_CONNECT(
                     name=self.name,
-                    id_key=ssh.remote_config.user + "@" + ssh.remote_config.host,
+                    id_key=self.ssh.remote_config.user
+                    + "@"
+                    + self.ssh.remote_config.host,
                     info="Opened",
                 ),
             )
@@ -1162,12 +1074,18 @@ class SFTP:
         record = CmdRecord[str](
             cmd=f"listdir {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
+
         res = self.sftp.listdir(path)
         for dir in res:
-            record.result.append(Term.putsln(dir))
+            record.result.append(rt_ts_res_msg(dir))
+            MessageBus_publish_result_with_Record(record)
         record.record_end()
         self.last_record = record
         return record
@@ -1176,13 +1094,19 @@ class SFTP:
         record = CmdRecord[SFTPAttributes](
             cmd=f"listdir_attr {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         res = self.sftp.listdir_attr(path)
         for attr in res:
-            t, _ = Term.putsln(str(attr))
-            record.result.append((t, Result(attr)))
+            # t, _ = Term.putsln(str(attr))
+            # record.result.append((t, Result(attr)))
+            record.result_append(attr)
+            MessageBus_publish_result_with_Record(record)
         record.record_end()
         self.last_record = record
         return record
@@ -1193,12 +1117,17 @@ class SFTP:
         record = CmdRecord[Iterator[SFTPAttributes]](
             cmd=f"listdir_iter {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
 
         res = self.sftp.listdir_iter(path, read_aheads)
         record.result_append(res)
+        # MessageBus_publish_result_with_Record(record)
         record.record_end()
         self.last_record = record
         return record
@@ -1209,9 +1138,13 @@ class SFTP:
         record = CmdRecord[SFTPFile](
             cmd=f"open {filename} {mode} {bufsize}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         res = self.sftp.open(filename, mode, bufsize)
         record.result_append(res)
         record.record_end()
@@ -1222,9 +1155,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"remove {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.remove(path)
         record.record_end()
         self.last_record = record
@@ -1234,9 +1171,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"rename {oldpath} {newpath}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.rename(oldpath, newpath)
         record.record_end()
         self.last_record = record
@@ -1248,9 +1189,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"posix_rename {oldpath} {newpath}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.posix_rename(oldpath, newpath)
         record.record_end()
         self.last_record = record
@@ -1260,8 +1205,12 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"mkdir {path} {mode}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         self.sftp.mkdir(path, mode)
         record.record_end()
@@ -1272,9 +1221,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"rmdir {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.rmdir(path)
         record.record_end()
         self.last_record = record
@@ -1284,9 +1237,13 @@ class SFTP:
         record = CmdRecord[SFTPAttributes](
             cmd=f"stat {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         res = self.sftp.stat(path)
         record.result_append(res)
         record.record_end()
@@ -1297,9 +1254,13 @@ class SFTP:
         record = CmdRecord[SFTPAttributes](
             cmd=f"lstat {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         res = self.sftp.lstat(path)
         record.result_append(res)
         record.record_end()
@@ -1310,9 +1271,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"symlink {source} {dest}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.symlink(source, dest)
         record.record_end()
         self.last_record = record
@@ -1322,9 +1287,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"chmod {path} {mode}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.chmod(path, mode)
         record.record_end()
         self.last_record = record
@@ -1334,9 +1303,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"chown {path} {uid} {gid}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.chown(path, uid, gid)
         record.record_end()
         self.last_record = record
@@ -1348,9 +1321,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"utime {path} {times}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.utime(path, times)
         record.record_end()
         self.last_record = record
@@ -1360,9 +1337,13 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"truncate {path} {size}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.sftp.truncate(path, size)
         record.record_end()
         self.last_record = record
@@ -1372,9 +1353,13 @@ class SFTP:
         record = CmdRecord[str | None](
             cmd=f"readlink {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         res = self.sftp.readlink(path)
         record.result_append(res)
         record.record_end()
@@ -1385,11 +1370,15 @@ class SFTP:
         record = CmdRecord[str](
             cmd=f"normalize {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
         res = self.sftp.normalize(path)
         record.result_append(res)
+        MessageBus_publish_prompt_with_Record(record)
         record.record_end()
         self.last_record = record
         return record
@@ -1398,8 +1387,12 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"chdir {path}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         self.sftp.chdir(path)
         record.record_end()
@@ -1410,8 +1403,12 @@ class SFTP:
         record = CmdRecord[str | None](
             cmd="getcwd",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         res = self.sftp.getcwd()
         Term.putsln(str(res))
@@ -1432,8 +1429,12 @@ class SFTP:
         record = CmdRecord[SFTPAttributes](
             cmd=f"putfo {remotepath}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         res = self.sftp.putfo(fl, remotepath, file_size, callback, confirm)
         record.result_append(res)
@@ -1451,12 +1452,17 @@ class SFTP:
         record = CmdRecord[SFTPAttributes](
             cmd=f"put {localpath} {remotepath}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         res = self.sftp.put(localpath, remotepath, callback, confirm)
-        Term.putsln(str(res))
+        # Term.putsln(str(res))
         record.result_append(res)
+        MessageBus_publish_result_with_Record(record)
         record.record_end()
         self.last_record = record
         return record
@@ -1472,15 +1478,20 @@ class SFTP:
         record = CmdRecord[int](
             cmd=f"getfo {remotepath}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         res = self.sftp.getfo(
             remotepath, fl, callback, prefetch, max_concurrent_prefetch_requests
         )
-        t, _ = Term.putsln(str(res))
+        record.result_append(res)
+        MessageBus_publish_result_with_Record(record)
+        # t, _ = Term.putsln(str(res))
         record.record_end()
-        record.result_append(res, t)
         self.last_record = record
         return record
 
@@ -1495,8 +1506,12 @@ class SFTP:
         record = CmdRecord[None](
             cmd=f"get {remotepath} {localpath}",
             prompt=self.prompt,
+            source=MessageSource.SFTP,
+            id_key=self.ssh.remote_config.user + "@" + self.ssh.remote_config.host,
+            name=self.name,
         )
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         self.cmds.append(record)
         self.sftp.get(
             remotepath, localpath, callback, prefetch, max_concurrent_prefetch_requests

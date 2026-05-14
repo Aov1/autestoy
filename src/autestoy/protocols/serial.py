@@ -10,12 +10,19 @@ from typing import Any, Generator, Iterable, Self, override
 
 import serial
 
-from autestoy.tools.control import get_line_from_head
+from ..export.messageio import (
+    # MessageBus,
+    MessageBus_publish_prompt_with_Record,
+    MessageBus_publish_result_with_Record,
+    MessageSource,
+)
 
-from ..export.collect import CollectObj, CollectType, collect
+# from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import PROMPT_pattern as prompt_pattern_default
-from ..export.term import Term
+
+# from ..export.term import Term
 from ..tools.ansi import remove_ansi
+from ..tools.control import get_line_from_head
 from ..tools.record import CmdRecord, MetaRecord
 
 
@@ -70,7 +77,7 @@ class SerialConfig:
         return self
 
 
-@collect(CollectType.Serial, CollectObj)
+# @collect(CollectType.Serial, CollectObj)
 class Serial:
     read_size = 1024
 
@@ -81,6 +88,7 @@ class Serial:
         # info
         self.config = serial_config
         self.name: str = self.config.name
+        self.port_baud = f"{self.config.port}@{str(self.config.baudrate)}"
         self.meta_record: MetaRecord = MetaRecord(
             type="Serial",
             name=self.name,
@@ -231,13 +239,18 @@ class SerialShell(Serial):
     def shell_run(self, cmd: str) -> CmdRecord:
         """串口以终端交互模式运行命令，捕获终端提示符确认退出"""
         record = CmdRecord[str](
-            cmd=cmd, prompt=f"[Serial][{self.name}]{self.prompt_now}"
+            cmd=cmd,
+            prompt=f"{self.prompt_now}",
+            source=MessageSource.SERIAL,
+            id_key=self.port_baud,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        # Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
         for line in self._run_line_generator(cmd):
-            timestamp, _ = Term.putsln(line)
-            record.result_append(line, timestamp)
+            record.result_append(line)
+            MessageBus_publish_result_with_Record(record)
 
         if self.f_get_exit_code:
             exit_code = next(self._run_line_generator("echo $?"))
@@ -250,10 +263,15 @@ class SerialShell(Serial):
         """串口终端模式sudo提权运行,只提权运行一次,运行后清除sudo缓存"""
         processed_cmd = f"sudo -k -S {cmd}"
         record = CmdRecord(
-            cmd=cmd, prompt=f"[Serial][{self.name}][sudo]{self.prompt_now}"
+            cmd=f"sudo {cmd}",
+            prompt=f"{self.prompt_now}",
+            source=MessageSource.SERIAL,
+            id_key=self.port_baud,
+            name=self.name,
         )
         self.cmds.append(record)
-        Term.putsln(record.get_fmt_prompt())
+        MessageBus_publish_prompt_with_Record(record)
+        # Term.putsln(record.get_fmt_prompt())
 
         self.send(processed_cmd.encode() + b"\n")
         self.com.read_until(b":")
@@ -263,8 +281,9 @@ class SerialShell(Serial):
 
         for is_output, line in self.readline_generator():
             if is_output:
-                timestamp, _ = Term.putsln(line)
-                record.result_append(line, timestamp)
+                # timestamp, _ = Term.putsln(line)
+                record.result_append(line)
+                MessageBus_publish_result_with_Record(record)
 
         if self.f_get_exit_code:
             exit_code = next(self._run_line_generator("echo $?"))

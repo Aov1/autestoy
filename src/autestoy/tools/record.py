@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import queue
 import re
 import threading as td
@@ -12,6 +13,7 @@ from paramiko.channel import ChannelFile as pk_ChannelFile
 from paramiko.channel import ChannelStderrFile as pk_ChannelStderrFile
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
+from ..export.messageio import MessageSource, MessageType
 from ..export.term import Term, TermStyle
 from ..tools.result import Result
 from ..tools.timestamp import Timestamp
@@ -30,29 +32,40 @@ Cmd output line example:
 [    0.002] [21]Hello World
 """
 
+_CMD_ID_GEN = itertools.count(1)
+
 
 class CmdRecord[T]:
     """命令记录类，用于记录命令的执行结果，规范不同协议发送输出的内容"""
 
-    _cmd_id: int = 0
+    # _cmd_id: int = 0
 
-    @classmethod
-    def id_generator(cls) -> int:
-        """类方法，生成命令的自增id"""
-        cls._cmd_id += 1
-        return cls._cmd_id
+    # @classmethod
+    # def id_generator(cls) -> int:
+    #     """类方法，生成命令的自增id"""
+    #     cls._cmd_id += 1
+    #     return cls._cmd_id
 
-    def __init__(self, cmd: str, prompt: str, create_id: bool = True) -> None:
+    def __init__(
+        self,
+        cmd: str,
+        prompt: str,
+        source: MessageSource,
+        id_key: str,
+        name: str,
+        # create_id: bool = True,
+    ) -> None:
         """初始化，为了减少运行时间的误差，请在发送命令前紧接该初始化"""
         # timestamp
         self.start_time: Timestamp = Timestamp()
         self.end_time: Timestamp | None = None
         self.run_time: float | None = None
         # info
-        self.id: int = CmdRecord.id_generator() if create_id else 0
+        self.id: int = next(_CMD_ID_GEN)
         self.prompt: str = prompt
-        self.source: str = ""
-        self.name: str = ""
+        self.source: MessageSource = source
+        self.name: str = name
+        self.id_key: str = id_key
         self.cmd: str = cmd
         self.result: list[tuple[Timestamp, Result[T]]] = []
         self.stdin: pk_ChannelStdinFile | None = None
@@ -109,17 +122,17 @@ class CmdRecord[T]:
 
     # def get_result
     def get_result(self) -> list[T]:
-        """获取命令的输出结果，去除Result，去除ansi转义\n
-        对于非str类型的结果尝试转换为str"""
+        """获取命令的输出结果，对于字符串去除Result，去除ansi转义\n
+        对于非str类型的结果不进行处理"""
         tmp = [e[1].get() for e in self.result]
         return [remove_ansi(str(e)) if isinstance(e, str) else e for e in tmp]
 
     def get_result_string(self) -> str:
-        """获取命令的输出结果字符串，将多行输出合并，去除ansi转义"""
+        """获取命令的输出结果字符串，非字符串进行转换，将多行输出合并，去除ansi转义"""
         return "\n".join((str(e) for e in self.get_result_iter()))
 
     def get_result_iter(self) -> Iterator[T]:
-        """获取命令的输出结果迭代器，去除ansi转义"""
+        """获取命令的输出结果迭代器，对于字符串结果去除ansi转义"""
         for _, res in self.result:
             val = res.get()
             yield remove_ansi(val) if isinstance(val, str) else val
@@ -180,8 +193,10 @@ class CmdRecord[T]:
 class CmdRecording(CmdRecord[T]):
     """线程指令的记录类，添加了线程相关的处理"""
 
-    def __init__(self, cmd: str, prompt: str) -> None:
-        super().__init__(cmd, prompt)
+    def __init__(
+        self, cmd: str, prompt: str, source: MessageSource, id_key: str, name: str
+    ) -> None:
+        super().__init__(cmd, prompt, source, id_key, name)
         # for long running
         self.fifo = queue.Queue()  # 用于主线程实时处理线程输出
         self.stop_event = td.Event()  # 用于停止线程的事件

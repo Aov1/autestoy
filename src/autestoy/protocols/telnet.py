@@ -90,6 +90,7 @@ class TelnetShell(Telnet):
         self,
         telnet_conf: TelnetConfig,
         user_and_password: tuple[str, str] | None = None,
+        login_timeout: float = 10,
         prompt_pattern: str = prompt_pattern_default,
     ) -> None:
         super().__init__(telnet_conf)
@@ -100,7 +101,7 @@ class TelnetShell(Telnet):
 
         # 是否登陆
         if self.user is not None or self.password is not None:
-            self.prompt = self._login(self.user, self.password)
+            self.prompt = self._login(self.user, self.password, login_timeout)
         else:
             # MARK BUG: 不登陆无法获取prompt
             # self.prompt = None
@@ -120,7 +121,7 @@ class TelnetShell(Telnet):
         raise RuntimeError("Prompt not found")
 
     def _login(
-        self, user: str | None = None, password: str | None = None
+        self, user: str | None = None, password: str | None = None, timeout: float = 10
     ) -> str | None:
         res = self.tel3.read_until("login:")
         self.tel3.write(f"{user}\n" if user is not None else "\n")
@@ -128,7 +129,7 @@ class TelnetShell(Telnet):
         self.tel3.write(f"{password}\n" if password is not None else "\n")
         buf = ""
         st = time.time()
-        while time.time() - st < 5:
+        while time.time() - st < timeout:
             res = self.recv_no_block()
             buf += res
             if "incorrect" in buf:

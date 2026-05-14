@@ -7,13 +7,13 @@ import threading as td
 import time
 
 # from enum import IntEnum, auto
-from typing import Generic, Iterator, TypeVar, override
+from typing import Iterator, TypeVar, override
 
 from paramiko.channel import ChannelFile as pk_ChannelFile
 from paramiko.channel import ChannelStderrFile as pk_ChannelStderrFile
 from paramiko.channel import ChannelStdinFile as pk_ChannelStdinFile
 
-from ..export.messageio import MessageSource, MessageType
+from ..export.messageio import MessageSource
 from ..export.term import Term, TermStyle
 from ..tools.result import Result
 from ..tools.timestamp import Timestamp

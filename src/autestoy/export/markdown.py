@@ -10,9 +10,8 @@ import os
 from autestoy.tools.record import CmdRecord
 
 # from ..tools.ansi import remove_ansi
-from ..protocols.local import Local
-from ..protocols.ssh import SFTP, SSH, Channel
-
+# from ..protocols.local import Local
+# from ..protocols.ssh import SFTP, SSH, Channel
 # from .baseinfo import get_script_dir, get_script_name
 # from .collect import CollectObj
 from .term import Term

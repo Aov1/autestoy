@@ -4,8 +4,8 @@ import time
 from typing import overload
 
 # from ..export.collect import CollectObj, CollectType, collect
-from ..export.messageio import Message, MessageBus
-from ..export.term import Term, TermStyle
+from ..export.messageio import MessageBus
+from ..export.term import Term
 from .ansi import AnsiColor, AnsiReset
 
 # from .record import CmdRecord

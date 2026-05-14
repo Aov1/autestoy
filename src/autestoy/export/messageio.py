@@ -9,12 +9,13 @@ import sys
 import threading as td
 import time
 from abc import ABC, abstractmethod
-from collections import defaultdict
+
+# from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from itertools import count
-from typing import Callable, Union
 
+# from typing import Callable, Union
 from ..tools.record import CmdRecord, CmdRecording
 from ..tools.timestamp import Timestamp
 

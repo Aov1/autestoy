@@ -674,7 +674,7 @@ class SSH:
                 raise TypeError(f"Unsupported type: {type(each)}")
         return res
 
-    def create_ftp(self) -> SFTP:
+    def create_sftp(self) -> SFTP:
         """创建sftp"""
         sftp = SFTP(self)
         self.sftp.append(sftp)
@@ -1132,6 +1132,11 @@ class SFTP:
         # self.meta_record.logs.append(
         #     Term.putsln(self.meta_record.get_fmt_prompt() + " Closed")
         # )
+        self.close()
+        return False
+
+    def close(self) -> None:
+        """关闭sftp连接"""
         self.sftp.close()
         MessageBus.publish(
             Message[data_DISCONNECT](
@@ -1143,11 +1148,10 @@ class SFTP:
                     id_key=self.ssh.remote_config.user
                     + "@"
                     + self.ssh.remote_config.host,
-                    info="Opened",
+                    info="Closed",
                 ),
             )
         )
-        return False
 
     # def create_channel(self, *args, **kwargs) -> Channel:
     #     """创建一个新的Channel对象，用于执行命令\n

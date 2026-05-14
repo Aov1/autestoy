@@ -1,30 +1,38 @@
 from __future__ import annotations
 
 import getpass
+import os
 import subprocess as sp
 import sys
 
-from ..export.collect import CollectObj, CollectType, collect
+from autestoy.export.messageio import Message, MessageBus, MessageSource
+
+# from ..export.collect import CollectObj, CollectType, collect
 from ..export.term import Term
-from .record import CmdRecord, MetaRecord
-from .timestamp import Timestamp
+from ..tools.record import CmdRecord, CmdRecording
+from ..tools.timestamp import Timestamp
 
 
-@collect(CollectType.Local, CollectObj)
+# @collect(CollectType.Local, CollectObj)
 class Local:
     def __init__(self):
         self.name = str(sys.platform)
-        self.meta_record = MetaRecord[str](
-            type="Local",
-            name=self.name,
-            info=getpass.getuser(),
-        )
+        self.user = getpass.getuser()
+        # self.meta_record = MetaRecord[str](
+        #     type="Local",
+        #     name=self.name,
+        #     info=getpass.getuser(),
+        # )
         self.start_time = Timestamp()
         self.cmds: list[CmdRecord] = []
 
     def run(self, cmd: str) -> CmdRecord[str]:  # TODO
         record = CmdRecord[str](
-            cmd=cmd, prompt=f"[Local {self.name}][{self.meta_record.info}]$"
+            cmd=cmd,
+            prompt=f"{os.getcwd()} $",
+            source=MessageSource.LOCAL,
+            id_key=self.name,
+            name=self.name,
         )
         self.cmds.append(record)
         Term.putsln(record.get_fmt_prompt())
@@ -42,3 +50,8 @@ class Local:
                 record.result.append(Term.putsln(err, set_font_color="red"))
         record.exit_code = res.poll()
         return record
+
+
+class LocalPopen:
+    def __init__(self):
+        sp.Popen
